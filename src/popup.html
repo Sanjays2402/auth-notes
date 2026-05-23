@@ -29,7 +29,62 @@
     </button>
   </header>
   <main id="root" class="content">
-    <section class="empty">
+    <!-- Master password setup -->
+    <section id="view-setup" class="view setup" hidden>
+      <div class="setup-art" aria-hidden="true">
+        <svg viewBox="0 0 160 120" width="140" height="105" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="32" y="52" width="96" height="56" rx="10" opacity=".8"/>
+          <path d="M54 52V36a26 26 0 0 1 52 0v16" opacity=".8"/>
+          <circle cx="80" cy="80" r="6"/>
+          <path d="M80 86v8"/>
+          <path d="M22 30c4 4 8 4 12 0M126 30c4 4 8 4 12 0" opacity=".4"/>
+          <circle cx="140" cy="60" r="2.5" opacity=".5"/>
+          <circle cx="20" cy="70" r="2" opacity=".5"/>
+        </svg>
+      </div>
+      <h2 class="view-title">Create a master password</h2>
+      <p class="view-sub">Encrypts every note locally with AES-GCM 256. We can&rsquo;t recover it &mdash; choose something memorable.</p>
+      <form id="setup-form" class="form" autocomplete="off" novalidate>
+        <label class="field">
+          <span class="field-label">Master password</span>
+          <div class="input-wrap">
+            <input id="setup-pw" type="password" minlength="8" required spellcheck="false" autocomplete="new-password" placeholder="At least 8 characters">
+            <button type="button" class="input-toggle" data-target="setup-pw" aria-label="Show password">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </label>
+        <div class="strength" aria-hidden="true">
+          <span class="strength-bar"><span id="strength-fill" class="strength-fill"></span></span>
+          <span id="strength-label" class="strength-label">&mdash;</span>
+        </div>
+        <label class="field">
+          <span class="field-label">Confirm password</span>
+          <div class="input-wrap">
+            <input id="setup-pw2" type="password" minlength="8" required spellcheck="false" autocomplete="new-password" placeholder="Type it again">
+            <button type="button" class="input-toggle" data-target="setup-pw2" aria-label="Show password">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </label>
+        <p id="setup-error" class="form-error" role="alert" hidden></p>
+        <button id="setup-submit" type="submit" class="btn-primary">
+          <span class="btn-label">Create vault</span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>
+          </svg>
+        </button>
+      </form>
+    </section>
+
+    <!-- Vault home placeholder (post-setup) -->
+    <section id="view-vault" class="view empty" hidden>
       <svg class="empty-art" viewBox="0 0 160 120" width="160" height="120" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="28" y="44" width="104" height="60" rx="10" opacity=".75"/>
         <path d="M52 44V32a28 28 0 0 1 56 0v12" opacity=".75"/>
@@ -37,8 +92,8 @@
         <path d="M80 80v8"/>
         <path d="M20 28l6 4M140 28l-6 4M16 60h6M138 60h6" opacity=".4"/>
       </svg>
-      <h2 class="empty-title">Your vault is empty</h2>
-      <p class="empty-sub">Roadmap features will populate this view. Local only, no sync, no cloud.</p>
+      <h2 class="empty-title">Vault unlocked</h2>
+      <p class="empty-sub">Per-site notes land here as the roadmap fills in.</p>
     </section>
   </main>
   <footer class="footer"><span class="version">v0.1.0</span></footer>
