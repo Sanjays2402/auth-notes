@@ -825,6 +825,76 @@ function updateQuick2faVisibility() {
   field.hidden = !sel.value || sel.value === "none";
 }
 
+// --- Password-strength hint helpers --------------------------------
+// We capture only a length bucket + a complexity tier. The actual password
+// is never persisted; the optional probe field below derives the bucket
+// in-memory and is wiped as soon as the user moves on.
+
+const PW_BUCKETS = ["weak", "okay", "good", "strong"];
+const PW_BUCKET_LABEL = { weak: "Weak", okay: "Okay", good: "Good", strong: "Strong" };
+
+function deriveBucketFromPassword(pw) {
+  if (!pw) return "";
+  let s = 0;
+  if (pw.length >= 8) s++;
+  if (pw.length >= 12) s++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+  if (/\d/.test(pw)) s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  const score = Math.min(4, s);
+  if (score <= 1) return "weak";
+  if (score === 2) return "okay";
+  if (score === 3) return "good";
+  return "strong";
+}
+
+function collectQuickPasswordHint() {
+  const lenEl = document.getElementById("quick-pw-length");
+  const complexityEl = document.getElementById("quick-pw-complexity");
+  const lenRaw = lenEl ? lenEl.value.trim() : "";
+  const lenNum = lenRaw === "" ? null : Number(lenRaw);
+  const length = Number.isFinite(lenNum) && lenNum > 0 ? Math.min(256, Math.round(lenNum)) : null;
+  const complexity = complexityEl ? String(complexityEl.value || "").toLowerCase() : "";
+  const out = {};
+  if (length != null) out.length = length;
+  if (PW_BUCKETS.includes(complexity)) out.complexity = complexity;
+  return Object.keys(out).length ? out : null;
+}
+
+function formatPasswordHint(hint) {
+  if (!hint || typeof hint !== "object") return "";
+  const parts = [];
+  if (Number.isFinite(hint.length) && hint.length > 0) {
+    parts.push(`${hint.length} chars`);
+  }
+  if (PW_BUCKETS.includes(hint.complexity)) {
+    parts.push(PW_BUCKET_LABEL[hint.complexity]);
+  }
+  return parts.join(" \u00b7 ");
+}
+
+function bindQuickPasswordHint() {
+  const probe = document.getElementById("quick-pw-probe");
+  const complexitySel = document.getElementById("quick-pw-complexity");
+  const lenEl = document.getElementById("quick-pw-length");
+  const clearBtn = document.getElementById("quick-pw-probe-clear");
+  if (probe && complexitySel && lenEl) {
+    probe.addEventListener("input", () => {
+      const v = probe.value;
+      if (!v) return;
+      lenEl.value = String(Math.min(256, v.length));
+      const bucket = deriveBucketFromPassword(v);
+      if (bucket) complexitySel.value = bucket;
+    });
+  }
+  if (clearBtn && probe) {
+    clearBtn.addEventListener("click", () => {
+      probe.value = "";
+      probe.focus();
+    });
+  }
+}
+
 async function openQuickAdd({ note = null, prefillOrigin = "" } = {}) {
   show("view-quick-add");
   setQuickError("");
@@ -846,6 +916,13 @@ async function openQuickAdd({ note = null, prefillOrigin = "" } = {}) {
   setVal("quick-2fa-detail", note?.twofaDetail || "");
   setVal("quick-tags", Array.isArray(note?.tags) ? note.tags.join(", ") : "");
   setVal("quick-notes", note?.notes || "");
+  // Password-strength hint fields.
+  const hint = note?.passwordHint || null;
+  setVal("quick-pw-length", hint?.length ? String(hint.length) : "");
+  setVal("quick-pw-complexity", hint?.complexity || "");
+  setVal("quick-pw-probe", "");
+  const probe = document.querySelector("#quick-pw-fieldset .pw-hint-probe");
+  if (probe) probe.open = false;
   updateQuick2faVisibility();
 
   // Focus first field that needs the user — origin if empty, else email.
@@ -881,6 +958,8 @@ async function startQuickAddFromCurrentTab() {
 function bindQuickAdd() {
   const back = document.getElementById("quick-back");
   back?.addEventListener("click", async () => {
+    const probe = document.getElementById("quick-pw-probe");
+    if (probe) probe.value = "";
     show("view-vault");
     await refreshCurrentSite();
   });
@@ -903,6 +982,8 @@ function bindQuickAdd() {
   const twofaSel = document.getElementById("quick-2fa");
   twofaSel?.addEventListener("change", updateQuick2faVisibility);
 
+  bindQuickPasswordHint();
+
   const form = document.getElementById("quick-form");
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -922,6 +1003,7 @@ function bindQuickAdd() {
       twofaDetail: document.getElementById("quick-2fa-detail").value.trim(),
       tags: document.getElementById("quick-tags").value,
       notes: document.getElementById("quick-notes").value,
+      passwordHint: collectQuickPasswordHint(),
     };
     if (quickEditingId) note.id = quickEditingId;
     const submit = document.getElementById("quick-submit");
@@ -929,6 +1011,8 @@ function bindQuickAdd() {
     if (submit) submit.disabled = true;
     try {
       await send("notes:upsert", { note });
+      const probe = document.getElementById("quick-pw-probe");
+      if (probe) probe.value = "";
       quickEditingId = null;
       show("view-vault");
       await refreshCurrentSite();
@@ -1070,6 +1154,7 @@ function renderMatch(note) {
     ? (note.twofaDetail ? `${prettyBackup(note.twofaBackup)} — ${note.twofaDetail}` : prettyBackup(note.twofaBackup))
     : "";
   showRow("match-row-2fa", "match-2fa", twofa);
+  showRow("match-row-pw", "match-pw", formatPasswordHint(note.passwordHint));
   showRow("match-row-notes", "match-notes", note.notes);
 
   const foot = document.getElementById("match-foot");

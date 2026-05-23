@@ -36,6 +36,59 @@ export const TAG_PRESETS = Object.freeze([
   "health",
 ]);
 
+/** Password strength buckets. UI maps these onto the 0-4 strength score
+ *  (`weak` covers scores 0-1, `okay` is 2, `good` is 3, `strong` is 4). */
+export const PW_COMPLEXITY_BUCKETS = Object.freeze(["weak", "okay", "good", "strong"]);
+
+/** Hard limit on the recorded password length. The number captures only
+ *  *how long* a password is, never the password itself. */
+export const PW_LENGTH_MAX = 256;
+
+/** Normalize a password-strength hint input. Returns `null` when there is
+ *  nothing useful to record so the caller can omit the field entirely.
+ *  The hint stores ONLY a length bucket and a complexity bucket — never the
+ *  password itself. The whole record still rides inside the AES-GCM payload,
+ *  this just guarantees we cannot accidentally persist plaintext secrets. */
+export function normalizePasswordHint(input) {
+  if (input == null) return null;
+  if (typeof input !== "object") return null;
+  let length = null;
+  if (input.length != null && input.length !== "") {
+    const n = Number(input.length);
+    if (Number.isFinite(n) && n > 0) {
+      length = Math.max(1, Math.min(PW_LENGTH_MAX, Math.round(n)));
+    }
+  }
+  let complexity = "";
+  if (input.complexity != null) {
+    const c = String(input.complexity).toLowerCase().trim();
+    if (PW_COMPLEXITY_BUCKETS.includes(c)) complexity = c;
+  }
+  if (length == null && !complexity) return null;
+  const out = {};
+  if (length != null) out.length = length;
+  if (complexity) out.complexity = complexity;
+  return out;
+}
+
+/** Derive a complexity bucket from a password string. Used only at input
+ *  time so the user doesn't have to pick the bucket by hand. The password
+ *  string itself MUST be discarded by the caller immediately after. */
+export function bucketForPassword(pw) {
+  if (!pw) return "";
+  let s = 0;
+  if (pw.length >= 8) s++;
+  if (pw.length >= 12) s++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+  if (/\d/.test(pw)) s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  const score = Math.min(4, s);
+  if (score <= 1) return "weak";
+  if (score === 2) return "okay";
+  if (score === 3) return "good";
+  return "strong";
+}
+
 /** Hard limits on the tag field. Tags live inside the encrypted payload
  *  (never on the storage envelope) so these guard payload size, not crypto. */
 export const TAG_MAX_COUNT = 12;
@@ -181,6 +234,8 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
     createdAt: Number.isFinite(input.createdAt) ? input.createdAt : now,
     updatedAt: now,
   };
+  const hint = normalizePasswordHint(input.passwordHint);
+  if (hint) record.passwordHint = hint;
   return record;
 }
 

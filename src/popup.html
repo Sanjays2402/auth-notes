@@ -221,6 +221,17 @@
               </dt>
               <dd id="match-2fa"></dd>
             </div>
+            <div class="match-row" id="match-row-pw" hidden>
+              <dt>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M7 11V8a5 5 0 0 1 10 0v3"/>
+                  <rect x="4" y="11" width="16" height="9" rx="2"/>
+                  <path d="M8 15.5h.01M12 15.5h.01M16 15.5h.01"/>
+                </svg>
+                <span>Password</span>
+              </dt>
+              <dd id="match-pw"></dd>
+            </div>
             <div class="match-row" id="match-row-notes" hidden>
               <dt>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -323,6 +334,54 @@
             <input id="quick-tags" type="text" spellcheck="false" placeholder="work, dev, banking">
           </div>
         </label>
+        <fieldset class="field field-fieldset" id="quick-pw-fieldset">
+          <legend class="field-label">Password strength (optional)</legend>
+          <p class="field-hint">Records a length bucket and complexity tier only — never the password itself.</p>
+          <div class="pw-hint-grid">
+            <label class="field pw-hint-len">
+              <span class="field-sublabel">Length</span>
+              <div class="input-wrap">
+                <input id="quick-pw-length" type="number" min="0" max="256" step="1" inputmode="numeric" placeholder="e.g. 18">
+              </div>
+            </label>
+            <label class="field pw-hint-complexity">
+              <span class="field-sublabel">Complexity</span>
+              <div class="select-wrap">
+                <select id="quick-pw-complexity">
+                  <option value="">— Not set</option>
+                  <option value="weak">Weak</option>
+                  <option value="okay">Okay</option>
+                  <option value="good">Good</option>
+                  <option value="strong">Strong</option>
+                </select>
+                <svg class="select-caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </div>
+            </label>
+          </div>
+          <details class="pw-hint-probe">
+            <summary>
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/>
+                <path d="M9 12l2 2 4-4"/>
+              </svg>
+              <span>Auto-fill from a password (one-time, not stored)</span>
+            </summary>
+            <div class="pw-hint-probe-row">
+              <div class="input-wrap">
+                <input id="quick-pw-probe" type="password" autocomplete="off" spellcheck="false" placeholder="Paste to measure, then clear">
+                <button type="button" class="input-toggle" data-target="quick-pw-probe" aria-label="Show password">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+              <button type="button" id="quick-pw-probe-clear" class="btn-secondary btn-compact">Clear</button>
+            </div>
+          </details>
+        </fieldset>
         <label class="field">
           <span class="field-label">Notes</span>
           <div class="input-wrap textarea-wrap">

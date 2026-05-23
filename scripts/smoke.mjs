@@ -90,6 +90,69 @@ if (!Array.isArray(back.tags) || !back.tags.includes("work") || !back.tags.inclu
   console.error("tag round-trip lost tags", back.tags); process.exit(1);
 }
 
+// --- Password-strength hint (length + complexity bucket) ----------
+if (!Array.isArray(notes.PW_COMPLEXITY_BUCKETS) || notes.PW_COMPLEXITY_BUCKETS.join(",") !== "weak,okay,good,strong") {
+  console.error("PW_COMPLEXITY_BUCKETS wrong"); process.exit(1);
+}
+if (notes.normalizePasswordHint(null) !== null) { console.error("normalizePasswordHint(null) should be null"); process.exit(1); }
+if (notes.normalizePasswordHint({}) !== null) { console.error("normalizePasswordHint({}) should be null"); process.exit(1); }
+if (notes.normalizePasswordHint({ length: "-3", complexity: "nope" }) !== null) {
+  console.error("normalizePasswordHint should drop invalid fields"); process.exit(1);
+}
+const hint1 = notes.normalizePasswordHint({ length: 18.7, complexity: "GOOD" });
+if (!hint1 || hint1.length !== 19 || hint1.complexity !== "good") {
+  console.error("normalizePasswordHint normalize failed", hint1); process.exit(1);
+}
+const hint2 = notes.normalizePasswordHint({ length: 9999 });
+if (!hint2 || hint2.length !== notes.PW_LENGTH_MAX || hint2.complexity != null) {
+  console.error("normalizePasswordHint clamp failed", hint2); process.exit(1);
+}
+if (notes.bucketForPassword("abc") !== "weak") { console.error("bucketForPassword weak"); process.exit(1); }
+if (notes.bucketForPassword("abcdefgh") !== "weak") { console.error("bucketForPassword len-only"); process.exit(1); }
+if (notes.bucketForPassword("Abcdef1!xyzQ") !== "strong") {
+  console.error("bucketForPassword strong", notes.bucketForPassword("Abcdef1!xyzQ")); process.exit(1);
+}
+
+const hinted = notes.normalizeNote({
+  origin: "https://bank.example.com/login",
+  authMethod: "password",
+  email: "me@example.com",
+  passwordHint: { length: 22, complexity: "strong" },
+});
+if (!hinted.passwordHint || hinted.passwordHint.length !== 22 || hinted.passwordHint.complexity !== "strong") {
+  console.error("normalizeNote did not carry passwordHint", hinted.passwordHint); process.exit(1);
+}
+// Sealed envelope must NEVER contain the hint in plaintext.
+const hintedEnv = await notes.encryptNote(key, hinted);
+notes.assertEnvelopeSealed(hintedEnv);
+const hintedEnvJson = JSON.stringify(hintedEnv);
+if (hintedEnvJson.includes("strong") || hintedEnvJson.includes("\"length\":22")) {
+  console.error("password hint leaked into envelope"); process.exit(1);
+}
+const hintedBack = await notes.decryptNote(key, hintedEnv);
+if (!hintedBack.passwordHint || hintedBack.passwordHint.length !== 22 || hintedBack.passwordHint.complexity !== "strong") {
+  console.error("passwordHint round-trip failed", hintedBack.passwordHint); process.exit(1);
+}
+// A note without a hint must omit the field entirely.
+const unhinted = notes.normalizeNote({ origin: "a.example", authMethod: "passkey" });
+if ("passwordHint" in unhinted) { console.error("unhinted note should omit passwordHint"); process.exit(1); }
+
+// Popup must wire up the new password-hint UI.
+const _hintPopupHtml = fs.readFileSync("src/popup.html", "utf8");
+const _hintPopupJs = fs.readFileSync("src/popup.js", "utf8");
+for (const needle of [
+  "quick-pw-fieldset", "quick-pw-length", "quick-pw-complexity", "quick-pw-probe",
+  "match-row-pw", "match-pw",
+]) {
+  if (!_hintPopupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+for (const needle of [
+  "collectQuickPasswordHint", "formatPasswordHint", "bindQuickPasswordHint",
+  "deriveBucketFromPassword",
+]) {
+  if (!_hintPopupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+
 let originRejected = false;
 try { notes.normalizeNote({ origin: "", authMethod: "password" }); }
 catch { originRejected = true; }

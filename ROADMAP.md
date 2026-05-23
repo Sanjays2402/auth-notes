@@ -17,7 +17,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Audit log of access events (encrypted)
 - [x] Liquid-glass popup UI
 - [x] Dark/light theme
-- [ ] Password strength hints recorded per site (length, complexity bucket)
+- [x] Password strength hints recorded per site (length, complexity bucket)
 - [ ] Recovery codes vault section with masked reveal
 - [ ] Per-note last-used date + auto-sort by recency
 - [ ] Bulk tag editor with multi-select
