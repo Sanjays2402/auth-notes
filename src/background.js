@@ -1206,4 +1206,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true; // async
 });
 
+// --- Quick-lock keyboard shortcut ---------------------------------------
+// Listen for the user-configured `quick-lock` command (default Cmd/Ctrl+Shift+L)
+// and immediately seal the vault, regardless of where focus currently is.
+chrome.commands?.onCommand?.addListener?.(async (command) => {
+  if (command !== "quick-lock") return;
+  if (!unlockedKey) return; // already locked, nothing to do
+  try {
+    await recordAuditEvent({ type: "auto-lock", detail: "quick-lock shortcut" });
+  } catch (err) {
+    console.warn("[auth-notes] audit quick-lock failed", err);
+  }
+  unlockedKey = null;
+  await writeMeta({ locked: true });
+  await clearAutoLockAlarm();
+  console.log("[auth-notes] vault locked via quick-lock shortcut");
+});
+
 console.log(`[auth-notes] service worker booted v${VERSION}`);

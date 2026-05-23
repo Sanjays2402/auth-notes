@@ -42,6 +42,13 @@
         "mac": "Command+Shift+Y"
       },
       "description": "Open Auth Notes on the current tab"
+    },
+    "quick-lock": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Quick-lock the Auth Notes vault"
     }
   }
 }

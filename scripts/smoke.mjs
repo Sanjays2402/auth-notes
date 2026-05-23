@@ -204,6 +204,20 @@ for (const needle of ["master:verify", "master:lock", "bindUnlockForm", "lockVau
   if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
 }
 
+// --- Quick-lock keyboard shortcut ---
+const manifestForCmd = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+if (!manifestForCmd.commands || !manifestForCmd.commands["quick-lock"]) {
+  console.error("manifest missing 'quick-lock' command"); process.exit(1);
+}
+const qlCmd = manifestForCmd.commands["quick-lock"];
+if (qlCmd.suggested_key?.default !== "Ctrl+Shift+L" || qlCmd.suggested_key?.mac !== "Command+Shift+L") {
+  console.error("quick-lock command must bind Cmd/Ctrl+Shift+L"); process.exit(1);
+}
+const bgForCmd = fs.readFileSync("src/background.js", "utf8");
+for (const needle of ["chrome.commands", "onCommand", "quick-lock"]) {
+  if (!bgForCmd.includes(needle)) { console.error("background.js missing quick-lock wiring:", needle); process.exit(1); }
+}
+
 // --- Auto-lock idle settings ---
 const manifestText = fs.readFileSync("manifest.json", "utf8");
 const manifest = JSON.parse(manifestText);

@@ -38,7 +38,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Per-site security checklist (2FA on?, unique email?, recovery codes saved?)
 - [x] Encrypted notes diff history (last 5 edits per note)
 - [x] Per-note attachment slots for recovery code screenshots (encrypted blobs)
-- [ ] Quick lock keyboard shortcut (Cmd/Ctrl+Shift+L)
+- [x] Quick lock keyboard shortcut (Cmd/Ctrl+Shift+L)
 - [ ] Vault health score with weighted security signals
 - [ ] Per-site notes printable view (paper-friendly, no glass)
 - [ ] Inline QR code generator for 2FA backup URIs (offline)
