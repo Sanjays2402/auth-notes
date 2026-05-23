@@ -342,6 +342,9 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
     // Don't allow future-dated timestamps; clamp to `now`.
     record.lastUsedAt = Math.min(Number(input.lastUsedAt), now);
   }
+  if (input.pinned === true || input.pinned === "true" || input.pinned === 1) {
+    record.pinned = true;
+  }
   return record;
 }
 
@@ -744,8 +747,24 @@ export function computeVaultStats(notes) {
 
 export function sortNotes(list) {
   return [...list].sort((a, b) => {
+    const pa = a && a.pinned ? 1 : 0;
+    const pb = b && b.pinned ? 1 : 0;
+    if (pa !== pb) return pb - pa;
     const dt = recencyOf(b) - recencyOf(a);
     if (dt !== 0) return dt;
     return String(a.label || "").localeCompare(String(b.label || ""));
   });
+}
+
+/** Partition a decrypted, already-sorted notes list into pinned/unpinned
+ *  groups. Order within each group is preserved. */
+export function partitionPinned(notes) {
+  const list = Array.isArray(notes) ? notes : [];
+  const pinned = [];
+  const rest = [];
+  for (const n of list) {
+    if (n && n.pinned) pinned.push(n);
+    else rest.push(n);
+  }
+  return { pinned, rest };
 }

@@ -32,7 +32,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Per-note custom fields (key/value pairs)
 - [x] Markdown rendering in note body with safe sanitizer
 - [x] Vault statistics dashboard (totals, 2FA coverage, oldest note)
-- [ ] Pinned notes section at top of list
+- [x] Pinned notes section at top of list
 - [ ] Trash/restore flow with 30-day soft delete
 - [ ] Quick filter chips by auth method (password, passkey, OAuth, SSO)
 - [ ] Per-site security checklist (2FA on?, unique email?, recovery codes saved?)

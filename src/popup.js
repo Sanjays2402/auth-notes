@@ -972,11 +972,32 @@ function renderSearchResults(payload, query) {
     : `${total} note${total === 1 ? "" : "s"} in vault`;
 
   const frag = document.createDocumentFragment();
+  let pinnedHeaderInserted = false;
+  let restHeaderInserted = false;
+  const hasPinned = results.some(({ note }) => note && note.pinned);
   for (const { note, hits } of results) {
+    if (!query && hasPinned) {
+      if (note.pinned && !pinnedHeaderInserted) {
+        const h = document.createElement("li");
+        h.className = "search-section-head";
+        h.setAttribute("role", "presentation");
+        h.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3l7 7-4 1-3 3 1 5-4-4-6 6 1-7-4-4 5 1 3-3z"/></svg><span>Pinned</span>`;
+        frag.appendChild(h);
+        pinnedHeaderInserted = true;
+      } else if (!note.pinned && !restHeaderInserted && pinnedHeaderInserted) {
+        const h = document.createElement("li");
+        h.className = "search-section-head";
+        h.setAttribute("role", "presentation");
+        h.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Recent</span>`;
+        frag.appendChild(h);
+        restHeaderInserted = true;
+      }
+    }
     const li = document.createElement("li");
     li.className = "search-item glass";
     li.setAttribute("role", "option");
     li.dataset.id = note.id || "";
+    if (note.pinned) li.classList.add("is-pinned");
     if (bulkSelected.has(note.id)) li.classList.add("is-selected");
     const label = note.label || displayOrigin(note.origin);
     const origin = displayOrigin(note.origin);
@@ -995,6 +1016,7 @@ function renderSearchResults(payload, query) {
       <div class="search-item-head">
         ${faviconHtml(note.origin)}
         <span class="search-item-label">${highlight(label, query)}</span>
+        ${note.pinned ? `<svg class="search-item-pin" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Pinned"><path d="M14 3l7 7-4 1-3 3 1 5-4-4-6 6 1-7-4-4 5 1 3-3z"/></svg>` : ""}
         ${auth ? `<span class="chip" data-auth="${escapeHtml(String(note.authMethod || "").toLowerCase())}">${escapeHtml(auth)}</span>` : ""}
       </div>
       <div class="search-item-origin">${highlight(origin, query)}</div>
@@ -1546,6 +1568,25 @@ function bindQuickAdd() {
 
   const editBtn = document.getElementById("match-edit");
   editBtn?.addEventListener("click", () => startQuickAddFromCurrentTab());
+  const pinBtn = document.getElementById("match-pin");
+  pinBtn?.addEventListener("click", async () => {
+    if (!currentMatchNote?.id) return;
+    pinBtn.disabled = true;
+    try {
+      const next = !currentMatchNote.pinned;
+      await send("notes:setPinned", { id: currentMatchNote.id, pinned: next });
+      currentMatchNote = { ...currentMatchNote, pinned: next };
+      pinBtn.dataset.pinned = next ? "true" : "false";
+      pinBtn.setAttribute("aria-pressed", next ? "true" : "false");
+      pinBtn.title = next ? "Unpin" : "Pin to top";
+      const lbl = document.getElementById("match-pin-label");
+      if (lbl) lbl.textContent = next ? "Pinned" : "Pin";
+    } catch (err) {
+      console.warn("[auth-notes] pin toggle failed", err);
+    } finally {
+      pinBtn.disabled = false;
+    }
+  });
 
   const twofaSel = document.getElementById("quick-2fa");
   twofaSel?.addEventListener("change", updateQuick2faVisibility);
@@ -1740,7 +1781,9 @@ function formatRelative(ts) {
   return `${Math.floor(mo / 12)}y ago`;
 }
 
+let currentMatchNote = null;
 function renderMatch(note) {
+  currentMatchNote = note;
   setSiteState("site-match");
   setText("match-label", note.label || displayOrigin(note.origin));
   const favWrap = document.getElementById("match-favicon");
@@ -1807,6 +1850,16 @@ function renderMatch(note) {
     if (usedRel) parts.push(`Last used ${usedRel}`);
     if (editRel) parts.push(`edited ${editRel}`);
     foot.textContent = parts.join(" \u2022 ");
+  }
+
+  const pinBtn = document.getElementById("match-pin");
+  const pinLabel = document.getElementById("match-pin-label");
+  if (pinBtn) {
+    const pinned = !!note.pinned;
+    pinBtn.dataset.pinned = pinned ? "true" : "false";
+    pinBtn.setAttribute("aria-pressed", pinned ? "true" : "false");
+    pinBtn.title = pinned ? "Unpin" : "Pin to top";
+    if (pinLabel) pinLabel.textContent = pinned ? "Pinned" : "Pin";
   }
 
   const tagsEl = document.getElementById("match-tags");

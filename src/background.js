@@ -795,6 +795,39 @@ handlers["notes:delete"] = async (msg) => {
 };
 
 /**
+ * Toggle (or set) the `pinned` flag on a note. Pinned notes float to the top
+ * of every list view. The flag rides inside the encrypted payload, so the
+ * envelope stays sealed.
+ */
+handlers["notes:setPinned"] = async (msg) => {
+  const key = requireUnlocked();
+  const id = String(msg?.id || "");
+  if (!id) throw new Error("id is required");
+  const envelopes = await readEnvelopes();
+  const idx = envelopes.findIndex((e) => e.id === id);
+  if (idx < 0) throw new Error("note not found");
+  let note;
+  try { note = await decryptNote(key, envelopes[idx]); }
+  catch { throw new Error("could not decrypt note"); }
+  const current = !!note.pinned;
+  const next = msg?.pinned == null ? !current : !!msg.pinned;
+  if (next === current) return { id, pinned: current, changed: false };
+  const updated = { ...note, pinned: next };
+  if (!next) delete updated.pinned;
+  envelopes[idx] = await encryptNote(key, updated);
+  await writeEnvelopes(envelopes);
+  try {
+    await recordAuditEvent({
+      type: "note:update",
+      origin: note.origin,
+      noteId: id,
+      detail: next ? "pinned" : "unpinned",
+    });
+  } catch (err) { console.warn("[auth-notes] audit setPinned failed", err); }
+  return { id, pinned: next, changed: true };
+};
+
+/**
  * Bump a note's `lastUsedAt` timestamp. Called when the popup surfaces a
  * matching note for the current tab so the auto-sort puts frequently-revisited
  * sites at the top. The whole record is re-sealed under the unlocked key —
