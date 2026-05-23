@@ -25,6 +25,7 @@ import {
   assertEnvelopeSealed,
   auditEnvelopes,
   collectTags,
+  computeVaultStats,
   decodeBackupContent,
   decryptAuditEvent,
   decryptNote,
@@ -591,6 +592,20 @@ handlers["notes:duplicates"] = async () => {
 handlers["notes:audit"] = async () => {
   const envelopes = await readEnvelopes();
   return auditEnvelopes(envelopes);
+};
+
+handlers["notes:stats"] = async () => {
+  const key = requireUnlocked();
+  const envelopes = await readEnvelopes();
+  const decrypted = [];
+  let undecryptable = 0;
+  for (const env of envelopes) {
+    try { decrypted.push(await decryptNote(key, env)); }
+    catch (err) { undecryptable++; console.warn("[auth-notes] skip undecryptable note", env.id, err); }
+  }
+  const stats = computeVaultStats(decrypted);
+  stats.undecryptable = undecryptable;
+  return stats;
 };
 
 handlers["notes:schema"] = async () => ({

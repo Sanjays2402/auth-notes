@@ -659,6 +659,89 @@ export function findDuplicateEmails(notes, { minCount = 2 } = {}) {
   return out;
 }
 
+/**
+ * Compute a snapshot of vault-wide statistics from a list of decrypted notes.
+ * Pure function — does not touch storage or crypto. The popup renders this
+ * straight into the Vault Stats dashboard.
+ *
+ * Returned shape:
+ *  - total: number of notes
+ *  - twofa: { covered, uncovered, coveragePct, byBackup: [{ key, count, pct }] }
+ *  - byAuthMethod: [{ key, count, pct }] — sorted desc by count
+ *  - oldest, newest: { id, label, origin, createdAt } | null
+ *  - mostStale: { id, label, origin, updatedAt } | null — oldest by updatedAt
+ *  - tags: { unique, total }
+ *  - recoveryCodes: count of notes with at least one recovery code
+ *  - passkey: count of notes whose authMethod is `passkey`
+ *  - duplicateEmails: number of reused-email groups
+ *  - emails: { withEmail, withoutEmail }
+ */
+export function computeVaultStats(notes) {
+  const list = Array.isArray(notes) ? notes.filter((n) => n && typeof n === "object") : [];
+  const total = list.length;
+  const byAuth = new Map();
+  const byBackup = new Map();
+  const tagSet = new Set();
+  let tagTotal = 0;
+  let covered = 0;
+  let recoveryCount = 0;
+  let passkeyCount = 0;
+  let withEmail = 0;
+  let oldest = null;
+  let newest = null;
+  let stale = null;
+  for (const n of list) {
+    const auth = String(n.authMethod || "other").toLowerCase() || "other";
+    byAuth.set(auth, (byAuth.get(auth) || 0) + 1);
+    const backup = String(n.twofaBackup || "none").toLowerCase() || "none";
+    byBackup.set(backup, (byBackup.get(backup) || 0) + 1);
+    if (backup !== "none") covered++;
+    if (auth === "passkey") passkeyCount++;
+    if (Array.isArray(n.recoveryCodes) && n.recoveryCodes.length > 0) recoveryCount++;
+    if (String(n.email || "").trim()) withEmail++;
+    if (Array.isArray(n.tags)) {
+      tagTotal += n.tags.length;
+      for (const t of n.tags) if (t) tagSet.add(t);
+    }
+    const created = Number(n.createdAt);
+    if (Number.isFinite(created)) {
+      const stamp = { id: n.id, label: n.label || n.origin, origin: n.origin, createdAt: created };
+      if (!oldest || created < oldest.createdAt) oldest = stamp;
+      if (!newest || created > newest.createdAt) newest = stamp;
+    }
+    const updated = Number(n.updatedAt);
+    if (Number.isFinite(updated)) {
+      const stamp = { id: n.id, label: n.label || n.origin, origin: n.origin, updatedAt: updated };
+      if (!stale || updated < stale.updatedAt) stale = stamp;
+    }
+  }
+  const toBreakdown = (m) => Array.from(m.entries())
+    .map(([key, count]) => ({
+      key,
+      count,
+      pct: total > 0 ? Math.round((count / total) * 100) : 0,
+    }))
+    .sort((a, b) => (b.count - a.count) || a.key.localeCompare(b.key));
+  return {
+    total,
+    twofa: {
+      covered,
+      uncovered: total - covered,
+      coveragePct: total > 0 ? Math.round((covered / total) * 100) : 0,
+      byBackup: toBreakdown(byBackup),
+    },
+    byAuthMethod: toBreakdown(byAuth),
+    oldest,
+    newest,
+    mostStale: stale,
+    tags: { unique: tagSet.size, total: tagTotal },
+    recoveryCodes: recoveryCount,
+    passkey: passkeyCount,
+    duplicateEmails: findDuplicateEmails(list).length,
+    emails: { withEmail, withoutEmail: total - withEmail },
+  };
+}
+
 export function sortNotes(list) {
   return [...list].sort((a, b) => {
     const dt = recencyOf(b) - recencyOf(a);

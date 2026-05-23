@@ -31,7 +31,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Auto-fill detected email into login forms (content script, opt-in)
 - [x] Per-note custom fields (key/value pairs)
 - [x] Markdown rendering in note body with safe sanitizer
-- [ ] Vault statistics dashboard (totals, 2FA coverage, oldest note)
+- [x] Vault statistics dashboard (totals, 2FA coverage, oldest note)
 - [ ] Pinned notes section at top of list
 - [ ] Trash/restore flow with 30-day soft delete
 - [ ] Quick filter chips by auth method (password, passkey, OAuth, SSO)

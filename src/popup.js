@@ -39,13 +39,13 @@ function syncThemeControls() {
 function show(id) {
   for (const v of document.querySelectorAll(".view")) v.hidden = v.id !== id;
   const lockBtn = document.getElementById("lock-btn");
-  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search" && id !== "view-quick-add" && id !== "view-audit" && id !== "view-duplicates";
+  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search" && id !== "view-quick-add" && id !== "view-audit" && id !== "view-duplicates" && id !== "view-stats";
   const searchBtn = document.getElementById("search-btn");
   if (searchBtn) searchBtn.hidden = id !== "view-vault";
   const addBtn = document.getElementById("add-btn");
   if (addBtn) addBtn.hidden = id !== "view-vault";
   const settingsBtn = document.getElementById("settings-btn");
-  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search" || id === "view-quick-add" || id === "view-audit" || id === "view-duplicates";
+  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search" || id === "view-quick-add" || id === "view-audit" || id === "view-duplicates" || id === "view-stats";
 }
 
 async function send(type, payload = {}) {
@@ -212,6 +212,7 @@ function bindSettings() {
   bindImport();
   bindAudit();
   bindDuplicates();
+  bindStats();
   bindThemePicker();
   bindShortcutCard();
   document.getElementById("tour-replay")?.addEventListener("click", () => {
@@ -738,6 +739,125 @@ async function renderDuplicates() {
     frag.appendChild(li);
   }
   list.appendChild(frag);
+}
+
+function bindStats() {
+  const opener = document.getElementById("stats-open");
+  opener?.addEventListener("click", () => {
+    opener.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }, { transform: "scale(1)" }],
+      { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    openStats();
+  });
+  const back = document.getElementById("stats-back");
+  back?.addEventListener("click", () => openSettings());
+}
+
+async function openStats() {
+  show("view-stats");
+  await renderStats();
+}
+
+function prettyKey(s) {
+  return String(s || "").replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function barRowHtml(row, label) {
+  const pct = Math.max(0, Math.min(100, Number(row.pct) || 0));
+  return `
+    <li class="stats-bar-row">
+      <span class="stats-bar-label">${escapeHtml(label || prettyKey(row.key))}</span>
+      <span class="stats-bar-track" aria-hidden="true"><span class="stats-bar-fill" style="width:${pct}%"></span></span>
+      <span class="stats-bar-count">${row.count}<span class="stats-bar-pct">· ${pct}%</span></span>
+    </li>
+  `;
+}
+
+async function renderStats() {
+  const summary = document.getElementById("stats-summary");
+  const body = document.getElementById("stats-body");
+  const empty = document.getElementById("stats-empty");
+  if (!summary || !body || !empty) return;
+  summary.textContent = "Crunching…";
+  body.hidden = true;
+  empty.hidden = true;
+  let stats;
+  try { stats = await send("notes:stats"); }
+  catch (err) {
+    summary.textContent = String(err?.message || err);
+    empty.hidden = false;
+    return;
+  }
+  const total = Number(stats?.total) || 0;
+  if (total === 0) {
+    summary.textContent = "";
+    empty.hidden = false;
+    return;
+  }
+  summary.textContent = `${total} note${total === 1 ? "" : "s"} sealed in your vault`;
+  body.hidden = false;
+
+  document.getElementById("stats-total").textContent = String(total);
+  document.getElementById("stats-2fa-pct").textContent = `${stats.twofa.coveragePct}%`;
+  document.getElementById("stats-passkey").textContent = String(stats.passkey || 0);
+  document.getElementById("stats-recovery").textContent = String(stats.recoveryCodes || 0);
+
+  const auth = Array.isArray(stats.byAuthMethod) ? stats.byAuthMethod : [];
+  const authList = document.getElementById("stats-auth-list");
+  const authSub = document.getElementById("stats-auth-sub");
+  if (authList) authList.innerHTML = auth.map((r) => barRowHtml(r, prettyAuth(r.key) || prettyKey(r.key))).join("");
+  if (authSub) authSub.textContent = auth.length ? `${auth.length} method${auth.length === 1 ? "" : "s"} in use` : "";
+
+  const backups = Array.isArray(stats.twofa?.byBackup) ? stats.twofa.byBackup : [];
+  const backupList = document.getElementById("stats-backup-list");
+  const backupSub = document.getElementById("stats-backup-sub");
+  if (backupList) backupList.innerHTML = backups.map((r) => barRowHtml(r, prettyBackup(r.key) || prettyKey(r.key))).join("");
+  if (backupSub) {
+    const covered = stats.twofa.covered;
+    const uncovered = stats.twofa.uncovered;
+    backupSub.textContent = `${covered} covered · ${uncovered} bare`;
+  }
+
+  const timeline = document.getElementById("stats-timeline");
+  if (timeline) {
+    const rows = [];
+    if (stats.oldest) rows.push({ kind: "oldest", label: "Oldest note", n: stats.oldest, when: stats.oldest.createdAt, prefix: "Added" });
+    if (stats.newest) rows.push({ kind: "newest", label: "Newest note", n: stats.newest, when: stats.newest.createdAt, prefix: "Added" });
+    if (stats.mostStale && (!stats.newest || stats.mostStale.id !== stats.newest.id)) {
+      rows.push({ kind: "stale", label: "Most stale", n: stats.mostStale, when: stats.mostStale.updatedAt, prefix: "Last edited" });
+    }
+    timeline.innerHTML = rows.map((r) => `
+      <li class="stats-timeline-row" data-kind="${escapeHtml(r.kind)}">
+        ${faviconHtml(r.n.origin, 20, r.n.label || displayOrigin(r.n.origin))}
+        <span class="stats-timeline-meta">
+          <span class="stats-timeline-kind">${escapeHtml(r.label)}</span>
+          <span class="stats-timeline-label">${escapeHtml(r.n.label || displayOrigin(r.n.origin))}</span>
+          <span class="stats-timeline-sub">${escapeHtml(displayOrigin(r.n.origin))} · ${escapeHtml(r.prefix)} ${escapeHtml(formatRelative(r.when) || "")}</span>
+        </span>
+        <button type="button" class="icon-btn" data-stats-edit="${escapeHtml(r.n.id)}" title="Edit note" aria-label="Edit note">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 4l6 6-11 11H3v-6z"/><path d="M13 5l6 6"/>
+          </svg>
+        </button>
+      </li>
+    `).join("");
+    timeline.onclick = async (e) => {
+      const btn = e.target instanceof Element ? e.target.closest("[data-stats-edit]") : null;
+      if (!btn) return;
+      e.preventDefault();
+      const id = btn.getAttribute("data-stats-edit");
+      if (!id) return;
+      try {
+        const note = await send("notes:get", { id });
+        if (note) await openQuickAdd({ note });
+      } catch (err) { console.warn("[auth-notes] stats edit failed", err); }
+    };
+  }
+
+  document.getElementById("stats-tags").textContent = String(stats.tags?.unique || 0);
+  document.getElementById("stats-emails").textContent = String(stats.emails?.withEmail || 0);
+  document.getElementById("stats-dupes").textContent = String(stats.duplicateEmails || 0);
 }
 
 function bindAudit() {
