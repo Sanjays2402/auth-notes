@@ -34,6 +34,6 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Vault statistics dashboard (totals, 2FA coverage, oldest note)
 - [x] Pinned notes section at top of list
 - [x] Trash/restore flow with 30-day soft delete
-- [ ] Quick filter chips by auth method (password, passkey, OAuth, SSO)
+- [x] Quick filter chips by auth method (password, passkey, OAuth, SSO)
 - [ ] Per-site security checklist (2FA on?, unique email?, recovery codes saved?)
 - [ ] Encrypted notes diff history (last 5 edits per note)

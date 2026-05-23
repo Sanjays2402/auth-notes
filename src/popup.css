@@ -1204,6 +1204,53 @@ body[data-theme="light"] .search-item mark {
 }
 .tag-chip-btn.is-active .tag-chip-count { opacity: 0.85; }
 
+/* --- Auth filter rail (search view) -------------------------------- */
+.auth-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 2px 6px;
+  margin: -2px 0 4px;
+}
+.auth-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  color: var(--fg-muted, rgba(230, 232, 240, 0.72));
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.auth-chip-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--fg, #e6e8f0);
+}
+.auth-chip-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.auth-chip-btn.is-active {
+  background: linear-gradient(135deg, var(--accent) 0%, #b08bff 100%);
+  color: #0b0d12;
+  border-color: transparent;
+}
+.auth-chip-btn svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.5;
+}
+
 /* --- Quick-add / edit view ----------------------------------------- */
 .view.quick-add {
   padding: 14px 16px 20px;

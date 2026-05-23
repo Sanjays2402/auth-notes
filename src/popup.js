@@ -1192,6 +1192,7 @@ function openSearch() {
     if (clearBtn) clearBtn.hidden = !input.value;
     setTimeout(() => input.focus(), 30);
   }
+  renderAuthFilterRail();
   refreshTagRail();
   runSearch(input?.value || "");
 }
@@ -1205,6 +1206,74 @@ function parseTagTokens(query) {
     }
   }
   return out;
+}
+
+const AUTH_FILTER_CHIPS = [
+  { id: "password", label: "Password" },
+  { id: "passkey", label: "Passkey" },
+  { id: "oauth", label: "OAuth" },
+  { id: "sso", label: "SSO" },
+];
+
+function parseAuthTokens(query) {
+  const out = new Set();
+  for (const tok of String(query || "").split(/\s+/)) {
+    if (tok.startsWith("auth:")) {
+      const t = tok.slice(5).toLowerCase().trim();
+      if (t) out.add(t);
+    }
+  }
+  return out;
+}
+
+function toggleAuthInQuery(query, id) {
+  const tokens = String(query || "").split(/\s+/).filter(Boolean);
+  const wanted = `auth:${id}`;
+  const idx = tokens.findIndex((t) => t.toLowerCase() === wanted);
+  if (idx >= 0) tokens.splice(idx, 1);
+  else tokens.push(wanted);
+  return tokens.join(" ");
+}
+
+function renderAuthFilterRail() {
+  const rail = document.getElementById("search-auth-rail");
+  const input = document.getElementById("search-input");
+  if (!rail) return;
+  const active = parseAuthTokens(input?.value || "");
+  rail.innerHTML = AUTH_FILTER_CHIPS.map(({ id, label }) => {
+    const on = active.has(id);
+    return `<button type="button" class="auth-chip-btn${on ? " is-active" : ""}" data-auth="${escapeHtml(id)}" aria-pressed="${on ? "true" : "false"}">${authFilterIconSvg(id)}<span>${escapeHtml(label)}</span></button>`;
+  }).join("");
+  for (const btn of rail.querySelectorAll(".auth-chip-btn")) {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.auth;
+      if (!id || !input) return;
+      const next = toggleAuthInQuery(input.value, id);
+      input.value = next;
+      const clearBtn = document.getElementById("search-clear");
+      if (clearBtn) clearBtn.hidden = !input.value;
+      renderAuthFilterRail();
+      refreshTagRail();
+      runSearch(input.value);
+    });
+  }
+}
+
+function authFilterIconSvg(id) {
+  // Phosphor-style stroke icons, inline. stroke-width 1.5, round caps.
+  const base = `viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+  switch (id) {
+    case "password":
+      return `<svg ${base}><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`;
+    case "passkey":
+      return `<svg ${base}><circle cx="9" cy="10" r="3"/><path d="M9 13v2m0-2l-2 2m2-2l2 2M14 12h6m-3-3v6"/></svg>`;
+    case "oauth":
+      return `<svg ${base}><path d="M21 12a9 9 0 1 1-3.5-7.1"/><path d="M21 4v5h-5"/></svg>`;
+    case "sso":
+      return `<svg ${base}><path d="M4 12h10"/><path d="M11 8l4 4-4 4"/><rect x="16" y="4" width="4" height="16" rx="1"/></svg>`;
+    default:
+      return "";
+  }
 }
 
 function toggleTagInQuery(query, tag) {
@@ -1382,6 +1451,7 @@ function bindBulkEditor() {
       if (addEl) addEl.value = "";
       if (remEl) remEl.value = "";
       bulkSelected.clear();
+      renderAuthFilterRail();
       refreshTagRail();
       const input = document.getElementById("search-input");
       runSearch(input?.value || "");
@@ -1417,6 +1487,7 @@ function bindSearch() {
     if (clearBtn) clearBtn.hidden = !input.value;
     clearTimeout(searchTimer);
     const q = input.value;
+    renderAuthFilterRail();
     refreshTagRail();
     searchTimer = setTimeout(() => runSearch(q), SEARCH_DEBOUNCE_MS);
   });
@@ -1425,6 +1496,8 @@ function bindSearch() {
       if (input.value) {
         input.value = "";
         if (clearBtn) clearBtn.hidden = true;
+        renderAuthFilterRail();
+        refreshTagRail();
         runSearch("");
       } else {
         show("view-vault");
@@ -1437,6 +1510,8 @@ function bindSearch() {
     input.value = "";
     clearBtn.hidden = true;
     input.focus();
+    renderAuthFilterRail();
+    refreshTagRail();
     runSearch("");
   });
 }

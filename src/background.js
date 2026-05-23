@@ -15,7 +15,9 @@ import {
 } from "./crypto.js";
 import {
   AUDIT_MAX,
+  AUTH_FILTER_GROUPS,
   AUTH_METHODS,
+  authMethodsForFilterGroup,
   BACKUP_FORMAT,
   BACKUP_SCHEMA,
   TAG_PRESETS,
@@ -624,6 +626,7 @@ handlers["notes:stats"] = async () => {
 
 handlers["notes:schema"] = async () => ({
   authMethods: AUTH_METHODS,
+  authFilterGroups: AUTH_FILTER_GROUPS,
   twofaBackups: TWOFA_BACKUPS,
   tagPresets: TAG_PRESETS,
 });
@@ -666,11 +669,19 @@ handlers["notes:search"] = async (msg) => {
   // the note's tags array. Other tokens fuzzy-match weighted fields.
   const rawTokens = q.split(/\s+/).filter(Boolean);
   const requiredTags = [];
+  const requiredAuthMethods = new Set();
+  let hasAuthFilter = false;
   const tokens = [];
   for (const t of rawTokens) {
     if (t.startsWith("tag:")) {
       const tag = normalizeTag(t.slice(4));
       if (tag) requiredTags.push(tag);
+    } else if (t.startsWith("auth:")) {
+      const methods = authMethodsForFilterGroup(t.slice(5));
+      if (methods && methods.length) {
+        hasAuthFilter = true;
+        for (const m of methods) requiredAuthMethods.add(m);
+      }
     } else {
       tokens.push(t);
     }
@@ -689,12 +700,18 @@ handlers["notes:search"] = async (msg) => {
   for (const note of decrypted) {
     const noteTags = Array.isArray(note.tags) ? note.tags.map((t) => String(t).toLowerCase()) : [];
     if (requiredTags.length > 0 && !requiredTags.every((t) => noteTags.includes(t))) continue;
+    if (hasAuthFilter) {
+      const am = String(note.authMethod || "").toLowerCase();
+      if (!requiredAuthMethods.has(am)) continue;
+    }
     const fields = Object.fromEntries(
       FIELD_WEIGHTS.map(([k]) => [k, k === "tags" ? noteTags.join(" ") : String(note[k] || "").toLowerCase()])
     );
     let totalScore = requiredTags.length * 4; // baseline for matching required tags
+    if (hasAuthFilter) totalScore += 4;
     const hits = new Set();
     if (requiredTags.length > 0) hits.add("tags");
+    if (hasAuthFilter) hits.add("authMethod");
     let allTokensMatched = true;
     for (const tok of tokens) {
       let tokenMatched = false;
@@ -708,7 +725,7 @@ handlers["notes:search"] = async (msg) => {
       }
       if (!tokenMatched) { allTokensMatched = false; break; }
     }
-    if (allTokensMatched && (tokens.length > 0 || requiredTags.length > 0)) {
+    if (allTokensMatched && (tokens.length > 0 || requiredTags.length > 0 || hasAuthFilter)) {
       scored.push({ note, score: totalScore, hits: [...hits] });
     }
   }

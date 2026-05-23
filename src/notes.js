@@ -22,6 +22,25 @@ export const AUTH_METHODS = Object.freeze([
   "other",
 ]);
 
+/** Auth-method filter groups. Used by the search view's quick-filter chips
+ *  and by background search to interpret `auth:<group>` tokens. Each group
+ *  maps a user-facing label onto one or more underlying `authMethod` values. */
+export const AUTH_FILTER_GROUPS = Object.freeze([
+  Object.freeze({ id: "password", label: "Password", methods: Object.freeze(["password"]) }),
+  Object.freeze({ id: "passkey", label: "Passkey", methods: Object.freeze(["passkey"]) }),
+  Object.freeze({ id: "oauth", label: "OAuth", methods: Object.freeze(["google", "github", "apple", "microsoft"]) }),
+  Object.freeze({ id: "sso", label: "SSO", methods: Object.freeze(["sso"]) }),
+]);
+
+/** Resolve an auth-filter group id (e.g. "oauth") to the set of underlying
+ *  authMethod values it covers. Returns null for unknown ids. */
+export function authMethodsForFilterGroup(id) {
+  const norm = String(id || "").trim().toLowerCase();
+  if (!norm) return null;
+  const g = AUTH_FILTER_GROUPS.find((x) => x.id === norm);
+  return g ? [...g.methods] : null;
+}
+
 /** Suggested tag presets — UI surfaces these on quick-add and as filter chips. */
 export const TAG_PRESETS = Object.freeze([
   "work",
