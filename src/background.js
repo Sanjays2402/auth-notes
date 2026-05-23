@@ -6,13 +6,16 @@ import {
   AUTH_METHODS,
   BACKUP_FORMAT,
   BACKUP_SCHEMA,
+  TAG_PRESETS,
   TWOFA_BACKUPS,
   assertEnvelopeSealed,
   auditEnvelopes,
+  collectTags,
   decodeBackupContent,
   decryptNote,
   encryptNote,
   normalizeNote,
+  normalizeTag,
   originOf,
   planImport,
   sortNotes,
@@ -321,7 +324,19 @@ handlers["notes:audit"] = async () => {
 handlers["notes:schema"] = async () => ({
   authMethods: AUTH_METHODS,
   twofaBackups: TWOFA_BACKUPS,
+  tagPresets: TAG_PRESETS,
 });
+
+handlers["notes:tags"] = async () => {
+  const key = requireUnlocked();
+  const envelopes = await readEnvelopes();
+  const decrypted = [];
+  for (const env of envelopes) {
+    try { decrypted.push(await decryptNote(key, env)); }
+    catch (err) { console.warn("[auth-notes] skip undecryptable note", env.id, err); }
+  }
+  return { tags: collectTags(decrypted), presets: TAG_PRESETS };
+};
 
 handlers["notes:search"] = async (msg) => {
   const key = requireUnlocked();
@@ -338,12 +353,24 @@ handlers["notes:search"] = async (msg) => {
     return { query: q, total: decrypted.length, results: sorted.slice(0, limit).map((n) => ({ note: n, score: 0, hits: [] })) };
   }
   // Tokenize once; AND-match across all tokens (each token must appear in at
-  // least one searchable field). Weighted by which field matched.
-  const tokens = q.split(/\s+/).filter(Boolean);
+  // least one searchable field). `tag:foo` tokens are matched exactly against
+  // the note's tags array. Other tokens fuzzy-match weighted fields.
+  const rawTokens = q.split(/\s+/).filter(Boolean);
+  const requiredTags = [];
+  const tokens = [];
+  for (const t of rawTokens) {
+    if (t.startsWith("tag:")) {
+      const tag = normalizeTag(t.slice(4));
+      if (tag) requiredTags.push(tag);
+    } else {
+      tokens.push(t);
+    }
+  }
   const FIELD_WEIGHTS = [
     ["label", 5],
     ["origin", 4],
     ["email", 3],
+    ["tags", 3],
     ["authMethod", 2],
     ["twofaBackup", 2],
     ["twofaDetail", 2],
@@ -351,11 +378,14 @@ handlers["notes:search"] = async (msg) => {
   ];
   const scored = [];
   for (const note of decrypted) {
+    const noteTags = Array.isArray(note.tags) ? note.tags.map((t) => String(t).toLowerCase()) : [];
+    if (requiredTags.length > 0 && !requiredTags.every((t) => noteTags.includes(t))) continue;
     const fields = Object.fromEntries(
-      FIELD_WEIGHTS.map(([k]) => [k, String(note[k] || "").toLowerCase()])
+      FIELD_WEIGHTS.map(([k]) => [k, k === "tags" ? noteTags.join(" ") : String(note[k] || "").toLowerCase()])
     );
-    let totalScore = 0;
+    let totalScore = requiredTags.length * 4; // baseline for matching required tags
     const hits = new Set();
+    if (requiredTags.length > 0) hits.add("tags");
     let allTokensMatched = true;
     for (const tok of tokens) {
       let tokenMatched = false;
@@ -369,7 +399,9 @@ handlers["notes:search"] = async (msg) => {
       }
       if (!tokenMatched) { allTokensMatched = false; break; }
     }
-    if (allTokensMatched) scored.push({ note, score: totalScore, hits: [...hits] });
+    if (allTokensMatched && (tokens.length > 0 || requiredTags.length > 0)) {
+      scored.push({ note, score: totalScore, hits: [...hits] });
+    }
   }
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;

@@ -473,6 +473,7 @@ function renderSearchResults(payload, query) {
     const updated = formatRelative(note.updatedAt);
     const hitSet = new Set(Array.isArray(hits) ? hits : []);
     const showNotes = hitSet.has("notes") && note.notes;
+    const tags = Array.isArray(note.tags) ? note.tags : [];
 
     li.innerHTML = `
       <div class="search-item-head">
@@ -483,6 +484,7 @@ function renderSearchResults(payload, query) {
       ${note.email ? `<div class="search-item-line"><span class="search-item-key">Email</span><span>${highlight(note.email, query)}</span></div>` : ""}
       ${twofa ? `<div class="search-item-line"><span class="search-item-key">2FA</span><span>${highlight(twofa, query)}</span></div>` : ""}
       ${showNotes ? `<div class="search-item-line search-item-notes"><span class="search-item-key">Note</span><span>${highlight(note.notes, query)}</span></div>` : ""}
+      ${tags.length ? `<div class="search-item-tags">${tags.map((t) => `<span class="tag-chip" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
       ${updated ? `<div class="search-item-foot">Updated ${escapeHtml(updated)}</div>` : ""}
     `;
     frag.appendChild(li);
@@ -511,7 +513,65 @@ function openSearch() {
     if (clearBtn) clearBtn.hidden = !input.value;
     setTimeout(() => input.focus(), 30);
   }
+  refreshTagRail();
   runSearch(input?.value || "");
+}
+
+function parseTagTokens(query) {
+  const out = new Set();
+  for (const tok of String(query || "").split(/\s+/)) {
+    if (tok.startsWith("tag:")) {
+      const t = tok.slice(4).toLowerCase().trim();
+      if (t) out.add(t);
+    }
+  }
+  return out;
+}
+
+function toggleTagInQuery(query, tag) {
+  const tokens = String(query || "").split(/\s+/).filter(Boolean);
+  const wanted = `tag:${tag}`;
+  const idx = tokens.findIndex((t) => t.toLowerCase() === wanted);
+  if (idx >= 0) tokens.splice(idx, 1);
+  else tokens.push(wanted);
+  return tokens.join(" ");
+}
+
+async function refreshTagRail() {
+  const rail = document.getElementById("search-tag-rail");
+  const input = document.getElementById("search-input");
+  if (!rail) return;
+  let data;
+  try { data = await send("notes:tags"); }
+  catch (err) {
+    console.warn("[auth-notes] notes:tags failed", err);
+    rail.hidden = true;
+    return;
+  }
+  const tags = Array.isArray(data?.tags) ? data.tags : [];
+  if (tags.length === 0) {
+    rail.hidden = true;
+    rail.innerHTML = "";
+    return;
+  }
+  const active = parseTagTokens(input?.value || "");
+  rail.hidden = false;
+  rail.innerHTML = tags.slice(0, 16).map(({ tag, count }) => {
+    const on = active.has(tag);
+    return `<button type="button" class="tag-chip tag-chip-btn${on ? " is-active" : ""}" data-tag="${escapeHtml(tag)}" aria-pressed="${on ? "true" : "false"}"><span>${escapeHtml(tag)}</span><span class="tag-chip-count">${count}</span></button>`;
+  }).join("");
+  for (const btn of rail.querySelectorAll(".tag-chip-btn")) {
+    btn.addEventListener("click", () => {
+      const tag = btn.dataset.tag;
+      if (!tag || !input) return;
+      const next = toggleTagInQuery(input.value, tag);
+      input.value = next;
+      const clearBtn = document.getElementById("search-clear");
+      if (clearBtn) clearBtn.hidden = !input.value;
+      refreshTagRail();
+      runSearch(input.value);
+    });
+  }
 }
 
 function bindSearch() {
@@ -534,6 +594,7 @@ function bindSearch() {
     if (clearBtn) clearBtn.hidden = !input.value;
     clearTimeout(searchTimer);
     const q = input.value;
+    refreshTagRail();
     searchTimer = setTimeout(() => runSearch(q), SEARCH_DEBOUNCE_MS);
   });
   input?.addEventListener("keydown", (e) => {
@@ -675,6 +736,18 @@ function renderMatch(note) {
   if (foot) {
     const rel = formatRelative(note.updatedAt);
     foot.textContent = rel ? `Updated ${rel}` : "";
+  }
+
+  const tagsEl = document.getElementById("match-tags");
+  if (tagsEl) {
+    const tags = Array.isArray(note.tags) ? note.tags : [];
+    if (tags.length === 0) {
+      tagsEl.hidden = true;
+      tagsEl.innerHTML = "";
+    } else {
+      tagsEl.hidden = false;
+      tagsEl.innerHTML = tags.map((t) => `<span class="tag-chip" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join("");
+    }
   }
 }
 

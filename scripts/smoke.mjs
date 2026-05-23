@@ -54,10 +54,27 @@ const norm = notes.normalizeNote({
   twofaBackup: "hardware-key",
   twofaDetail: "YubiKey 5C in desk drawer",
   notes: "primary identity",
+  tags: ["Work", "dev", "work", "Has Space", "!!!", ""],
 });
 if (norm.origin !== "github.com") { console.error("origin not normalized"); process.exit(1); }
 if (!norm.id || norm.id.length < 10) { console.error("missing id"); process.exit(1); }
 if (!norm.createdAt || !norm.updatedAt) { console.error("missing timestamps"); process.exit(1); }
+if (!Array.isArray(norm.tags) || norm.tags.join(",") !== "work,dev,has-space") {
+  console.error("tags not normalized", norm.tags); process.exit(1);
+}
+if (notes.normalizeTag("  Foo BAR  ") !== "foo-bar") { console.error("normalizeTag wrong"); process.exit(1); }
+if (notes.normalizeTags("work, personal,banking").join(",") !== "work,personal,banking") {
+  console.error("normalizeTags string wrong"); process.exit(1);
+}
+const tagAgg = notes.collectTags([
+  { tags: ["work", "dev"] }, { tags: ["work"] }, { tags: ["personal"] }, {},
+]);
+if (tagAgg[0].tag !== "work" || tagAgg[0].count !== 2) {
+  console.error("collectTags wrong", tagAgg); process.exit(1);
+}
+if (!Array.isArray(notes.TAG_PRESETS) || !notes.TAG_PRESETS.includes("work")) {
+  console.error("TAG_PRESETS missing"); process.exit(1);
+}
 
 const env = await notes.encryptNote(key, norm);
 if (env.origin !== "github.com") { console.error("envelope origin"); process.exit(1); }
@@ -68,6 +85,9 @@ if (env.email || env.notes || env.twofaDetail) {
 const back = await notes.decryptNote(key, env);
 if (back.email !== "me@example.com" || back.twofaDetail !== "YubiKey 5C in desk drawer") {
   console.error("note round-trip mismatch"); process.exit(1);
+}
+if (!Array.isArray(back.tags) || !back.tags.includes("work") || !back.tags.includes("dev")) {
+  console.error("tag round-trip lost tags", back.tags); process.exit(1);
 }
 
 let originRejected = false;
@@ -104,6 +124,12 @@ if (audit.total !== 2 || audit.sealed !== 1 || audit.leaks.length !== 1) {
 if (!audit.leaks[0].fields.includes("notes")) {
   console.error("audit leak field missing", audit.leaks[0]); process.exit(1);
 }
+
+// Tags must be a forbidden plaintext envelope field too.
+let tagsLeakRejected = false;
+try { notes.assertEnvelopeSealed({ ...env, tags: ["leak"] }); }
+catch { tagsLeakRejected = true; }
+if (!tagsLeakRejected) { console.error("tags should be forbidden on envelope"); process.exit(1); }
 
 // --- Lock/unlock UI wiring (static check) ---
 const popupHtml = fs.readFileSync("src/popup.html", "utf8");

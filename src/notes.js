@@ -22,6 +22,73 @@ export const AUTH_METHODS = Object.freeze([
   "other",
 ]);
 
+/** Suggested tag presets — UI surfaces these on quick-add and as filter chips. */
+export const TAG_PRESETS = Object.freeze([
+  "work",
+  "personal",
+  "banking",
+  "shopping",
+  "social",
+  "dev",
+  "infra",
+  "family",
+  "finance",
+  "health",
+]);
+
+/** Hard limits on the tag field. Tags live inside the encrypted payload
+ *  (never on the storage envelope) so these guard payload size, not crypto. */
+export const TAG_MAX_COUNT = 12;
+export const TAG_MAX_LEN = 32;
+
+/** Normalize a single tag: trim, lowercase, collapse whitespace, slug-ish.
+ *  Returns empty string for inputs that aren't useful as tags. */
+export function normalizeTag(input) {
+  if (input == null) return "";
+  const s = String(input).toLowerCase().trim().replace(/\s+/g, "-");
+  // Allow letters, digits, dash, underscore, dot. Strip everything else.
+  const cleaned = s.replace(/[^a-z0-9._-]+/g, "");
+  if (!cleaned) return "";
+  if (cleaned.length > TAG_MAX_LEN) return cleaned.slice(0, TAG_MAX_LEN);
+  return cleaned;
+}
+
+/** Normalize a tags input (array | comma string | undefined) → deduped array. */
+export function normalizeTags(input) {
+  if (input == null || input === "") return [];
+  let raw;
+  if (Array.isArray(input)) raw = input;
+  else if (typeof input === "string") raw = input.split(/[,\s]+/);
+  else return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    const tag = normalizeTag(item);
+    if (!tag || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+    if (out.length >= TAG_MAX_COUNT) break;
+  }
+  return out;
+}
+
+/** Aggregate tag usage across a list of decrypted notes. */
+export function collectTags(notes) {
+  const counts = new Map();
+  if (!Array.isArray(notes)) return [];
+  for (const n of notes) {
+    if (!n || !Array.isArray(n.tags)) continue;
+    for (const t of n.tags) {
+      const tag = normalizeTag(t);
+      if (!tag) continue;
+      counts.set(tag, (counts.get(tag) || 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag));
+}
+
 /** Allowed 2FA backup locations. */
 export const TWOFA_BACKUPS = Object.freeze([
   "none",
@@ -110,6 +177,7 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
     twofaBackup,
     twofaDetail: trimStr(input.twofaDetail, MAX_FIELD),
     notes: trimStr(input.notes, MAX_FIELD * 4),
+    tags: normalizeTags(input.tags),
     createdAt: Number.isFinite(input.createdAt) ? input.createdAt : now,
     updatedAt: now,
   };
@@ -145,6 +213,7 @@ export const ENVELOPE_FORBIDDEN_KEYS = Object.freeze([
   "twofaBackup",
   "twofaDetail",
   "notes",
+  "tags",
   "createdAt",
   "updatedAt",
 ]);
