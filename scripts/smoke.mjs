@@ -676,4 +676,69 @@ if (!mdPopupCss.includes(".markdown-body")) {
   console.error("popup.css missing markdown-body styles"); process.exit(1);
 }
 
+// --- Trash / soft-delete -------------------------------------------
+if (typeof notes.partitionTrash !== "function" || typeof notes.isTrashed !== "function" || typeof notes.trashTtlMs !== "function") {
+  console.error("trash helpers missing from notes.js"); process.exit(1);
+}
+if (notes.TRASH_RETENTION_MS !== 30 * 24 * 60 * 60 * 1000) {
+  console.error("TRASH_RETENTION_MS drift"); process.exit(1);
+}
+const trashNow = 1_800_000_000_000;
+const activeNote = notes.normalizeNote({ origin: "keep.test", authMethod: "passkey" }, { now: trashNow });
+const freshTrash = notes.normalizeNote({ origin: "drop.test", authMethod: "password", deletedAt: trashNow - 1000 }, { now: trashNow });
+const staleTrash = notes.normalizeNote({ origin: "gc.test", authMethod: "password", deletedAt: trashNow - notes.TRASH_RETENTION_MS - 5_000 }, { now: trashNow });
+if (!notes.isTrashed(freshTrash) || notes.isTrashed(activeNote)) {
+  console.error("isTrashed wrong"); process.exit(1);
+}
+const part = notes.partitionTrash([activeNote, freshTrash, staleTrash], { now: trashNow });
+if (part.active.length !== 1 || part.trashed.length !== 2 || part.expired.length !== 1 || part.expired[0].origin !== "gc.test") {
+  console.error("partitionTrash wrong", part); process.exit(1);
+}
+const ttl = notes.trashTtlMs(freshTrash, { now: trashNow });
+if (!(ttl > 0 && ttl <= notes.TRASH_RETENTION_MS)) {
+  console.error("trashTtlMs wrong", ttl); process.exit(1);
+}
+if (notes.trashTtlMs(staleTrash, { now: trashNow }) !== 0) {
+  console.error("expired trash ttl should be 0"); process.exit(1);
+}
+if (notes.trashTtlMs(activeNote) !== null) {
+  console.error("active note ttl should be null"); process.exit(1);
+}
+const forged = notes.normalizeNote({ origin: "forge.test", authMethod: "password", deletedAt: trashNow + 9_999_999 }, { now: trashNow });
+if (forged.deletedAt !== trashNow) {
+  console.error("deletedAt should clamp to now", forged.deletedAt); process.exit(1);
+}
+const trashEnv = await notes.encryptNote(key, freshTrash);
+notes.assertEnvelopeSealed(trashEnv);
+if (JSON.stringify(trashEnv).includes("deletedAt")) {
+  console.error("deletedAt must not be plaintext on envelope"); process.exit(1);
+}
+const trashBack = await notes.decryptNote(key, trashEnv);
+if (!notes.isTrashed(trashBack) || trashBack.deletedAt !== freshTrash.deletedAt) {
+  console.error("trashed note round-trip lost deletedAt"); process.exit(1);
+}
+const trashBg = fs.readFileSync("src/background.js", "utf8");
+for (const needle of [
+  'handlers["notes:restore"]',
+  'handlers["notes:trashList"]',
+  'handlers["notes:purgeTrash"]',
+  'handlers["notes:purgeExpired"]',
+  "purgeExpiredTrash",
+  "TRASH_RETENTION_MS",
+]) {
+  if (!trashBg.includes(needle)) { console.error("background.js missing", needle); process.exit(1); }
+}
+const trashPopupHtml = fs.readFileSync("src/popup.html", "utf8");
+for (const needle of ["view-trash", "trash-open", "trash-list", "trash-empty"]) {
+  if (!trashPopupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+const trashPopupJs = fs.readFileSync("src/popup.js", "utf8");
+for (const needle of ["bindTrash", "openTrash", "renderTrash", "notes:trashList", "notes:restore", "notes:purgeTrash"]) {
+  if (!trashPopupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+const trashPopupCss = fs.readFileSync("src/popup.css", "utf8");
+if (!trashPopupCss.includes(".trash-list") || !trashPopupCss.includes(".trash-item")) {
+  console.error("popup.css missing trash styles"); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");

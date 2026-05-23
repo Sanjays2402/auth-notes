@@ -752,6 +752,24 @@ efgh-5678"></textarea>
       <div class="glass settings-card">
         <div class="settings-row">
           <div class="settings-row-text">
+            <span class="settings-row-title">Trash</span>
+            <span class="settings-row-sub" id="trash-sub">Deleted notes stay encrypted for 30 days, then auto-purge. Restore or empty the bin.</span>
+          </div>
+        </div>
+        <div class="settings-control">
+          <div class="import-row">
+            <button type="button" id="trash-open" class="btn-secondary">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 7h16"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v7M14 11v7"/>
+              </svg>
+              <span class="btn-label">Open trash</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="glass settings-card">
+        <div class="settings-row">
+          <div class="settings-row-text">
             <span class="settings-row-title">Audit log</span>
             <span class="settings-row-sub">Encrypted record of unlocks, locks, note edits, exports, and imports. Sealed with your master password.</span>
           </div>
@@ -806,6 +824,36 @@ efgh-5678"></textarea>
         </div>
       </div>
 
+    </section>
+    <section id="view-trash" class="view trash" hidden>
+      <div class="settings-head">
+        <button type="button" id="trash-back" class="icon-btn" title="Back" aria-label="Back">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+        </button>
+        <h2 class="view-title settings-title">Trash</h2>
+        <button type="button" id="trash-empty" class="icon-btn" title="Empty trash" aria-label="Empty trash" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 7h16"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/>
+          </svg>
+        </button>
+      </div>
+      <div class="glass settings-card trash-card">
+        <p class="settings-row-sub trash-intro">Soft-deleted notes linger here for <strong>30 days</strong>, fully encrypted at rest, then auto-purge. Restore them, or empty the bin to delete forever.</p>
+        <p id="trash-status" class="settings-hint" role="status" hidden></p>
+        <div id="trash-empty-state" class="trash-empty-state" hidden>
+          <svg class="site-empty-art" viewBox="0 0 120 80" width="120" height="80" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M28 28h64l-5 38a6 6 0 0 1-6 5H39a6 6 0 0 1-6-5z" opacity=".5"/>
+            <path d="M22 28h76" opacity=".8"/>
+            <path d="M46 28v-6a6 6 0 0 1 6-6h16a6 6 0 0 1 6 6v6" opacity=".8"/>
+            <path d="M50 40v22M60 40v22M70 40v22" opacity=".5"/>
+          </svg>
+          <p class="site-empty-title">Trash is empty</p>
+          <p class="site-empty-sub">Anything you delete from the vault lands here for 30 days before it&rsquo;s gone for good.</p>
+        </div>
+        <ul id="trash-list" class="trash-list" hidden></ul>
+      </div>
     </section>
     <section id="view-duplicates" class="view duplicates" hidden>
       <div class="settings-head">

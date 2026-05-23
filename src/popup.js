@@ -39,13 +39,13 @@ function syncThemeControls() {
 function show(id) {
   for (const v of document.querySelectorAll(".view")) v.hidden = v.id !== id;
   const lockBtn = document.getElementById("lock-btn");
-  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search" && id !== "view-quick-add" && id !== "view-audit" && id !== "view-duplicates" && id !== "view-stats";
+  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search" && id !== "view-quick-add" && id !== "view-audit" && id !== "view-duplicates" && id !== "view-stats" && id !== "view-trash";
   const searchBtn = document.getElementById("search-btn");
   if (searchBtn) searchBtn.hidden = id !== "view-vault";
   const addBtn = document.getElementById("add-btn");
   if (addBtn) addBtn.hidden = id !== "view-vault";
   const settingsBtn = document.getElementById("settings-btn");
-  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search" || id === "view-quick-add" || id === "view-audit" || id === "view-duplicates" || id === "view-stats";
+  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search" || id === "view-quick-add" || id === "view-audit" || id === "view-duplicates" || id === "view-stats" || id === "view-trash";
 }
 
 async function send(type, payload = {}) {
@@ -213,6 +213,7 @@ function bindSettings() {
   bindAudit();
   bindDuplicates();
   bindStats();
+  bindTrash();
   bindThemePicker();
   bindShortcutCard();
   document.getElementById("tour-replay")?.addEventListener("click", () => {
@@ -633,6 +634,144 @@ async function renderAuditLog() {
 async function openAuditLog() {
   show("view-audit");
   await renderAuditLog();
+}
+
+function bindTrash() {
+  const opener = document.getElementById("trash-open");
+  opener?.addEventListener("click", () => {
+    opener.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }, { transform: "scale(1)" }],
+      { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    openTrash();
+  });
+  const back = document.getElementById("trash-back");
+  back?.addEventListener("click", () => openSettings());
+  const empty = document.getElementById("trash-empty");
+  empty?.addEventListener("click", async () => {
+    if (!confirm("Permanently delete every note in the trash? This cannot be undone.")) return;
+    try {
+      const res = await send("notes:purgeTrash");
+      setTrashStatus(`Purged ${res.purged} note${res.purged === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setTrashStatus(String(err?.message || err), { error: true });
+    }
+    await renderTrash();
+  });
+  const list = document.getElementById("trash-list");
+  list?.addEventListener("click", async (e) => {
+    const restoreBtn = e.target instanceof Element ? e.target.closest("[data-restore-id]") : null;
+    const purgeBtn = e.target instanceof Element ? e.target.closest("[data-purge-id]") : null;
+    if (restoreBtn) {
+      e.preventDefault();
+      const id = restoreBtn.getAttribute("data-restore-id");
+      if (!id) return;
+      try {
+        await send("notes:restore", { id });
+        setTrashStatus("Restored.");
+      } catch (err) { setTrashStatus(String(err?.message || err), { error: true }); }
+      await renderTrash();
+      return;
+    }
+    if (purgeBtn) {
+      e.preventDefault();
+      const id = purgeBtn.getAttribute("data-purge-id");
+      if (!id) return;
+      if (!confirm("Delete this note forever? It will not be recoverable.")) return;
+      try {
+        await send("notes:delete", { id, hard: true });
+        setTrashStatus("Deleted forever.");
+      } catch (err) { setTrashStatus(String(err?.message || err), { error: true }); }
+      await renderTrash();
+    }
+  });
+}
+
+function setTrashStatus(text, { error = false } = {}) {
+  const node = document.getElementById("trash-status");
+  if (!node) return;
+  if (!text) { node.hidden = true; node.textContent = ""; return; }
+  node.hidden = false;
+  node.textContent = text;
+  node.classList.toggle("is-error", !!error);
+  clearTimeout(setTrashStatus._t);
+  setTrashStatus._t = setTimeout(() => { node.hidden = true; }, 2800);
+}
+
+async function openTrash() {
+  show("view-trash");
+  setTrashStatus("");
+  await renderTrash();
+}
+
+function formatTtl(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "purges any moment";
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (days >= 1) return `purges in ${days} day${days === 1 ? "" : "s"}`;
+  const hours = Math.max(1, Math.floor(ms / (60 * 60 * 1000)));
+  return `purges in ${hours}h`;
+}
+
+async function renderTrash() {
+  const list = document.getElementById("trash-list");
+  const emptyEl = document.getElementById("trash-empty-state");
+  const emptyBtn = document.getElementById("trash-empty");
+  if (!list || !emptyEl) return;
+  list.innerHTML = "";
+  let payload;
+  try { payload = await send("notes:trashList"); }
+  catch (err) {
+    list.hidden = true;
+    emptyEl.hidden = false;
+    if (emptyBtn) emptyBtn.hidden = true;
+    setTrashStatus(String(err?.message || err), { error: true });
+    return;
+  }
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  if (items.length === 0) {
+    list.hidden = true;
+    emptyEl.hidden = false;
+    if (emptyBtn) emptyBtn.hidden = true;
+    return;
+  }
+  emptyEl.hidden = true;
+  list.hidden = false;
+  if (emptyBtn) emptyBtn.hidden = false;
+  const frag = document.createDocumentFragment();
+  for (const it of items) {
+    const li = document.createElement("li");
+    li.className = "trash-item glass";
+    const fav = faviconHtml(it.origin, 24, it.label || displayOrigin(it.origin));
+    const ttl = formatTtl(it.ttlMs);
+    const deleted = it.deletedAt ? formatRelative(it.deletedAt) : "";
+    li.innerHTML = `
+      <div class="trash-item-head">
+        ${fav}
+        <div class="trash-item-meta">
+          <span class="trash-item-label"></span>
+          <span class="trash-item-sub"></span>
+        </div>
+      </div>
+      <div class="trash-item-actions">
+        <button type="button" class="btn-secondary btn-compact" data-restore-id="${it.id}" title="Restore note">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 12a8 8 0 1 1 2.3 5.6"/><path d="M3 8v5h5"/>
+          </svg>
+          <span class="btn-label">Restore</span>
+        </button>
+        <button type="button" class="btn-secondary btn-compact btn-danger" data-purge-id="${it.id}" title="Delete forever">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 7h16"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/>
+          </svg>
+          <span class="btn-label">Delete</span>
+        </button>
+      </div>
+    `;
+    li.querySelector(".trash-item-label").textContent = it.label || displayOrigin(it.origin);
+    li.querySelector(".trash-item-sub").textContent = deleted ? `deleted ${deleted} • ${ttl}` : ttl;
+    frag.appendChild(li);
+  }
+  list.appendChild(frag);
 }
 
 function bindDuplicates() {

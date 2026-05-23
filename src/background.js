@@ -32,13 +32,16 @@ import {
   encryptAuditEvent,
   encryptNote,
   findDuplicateEmails,
+  isTrashed,
   normalizeAuditEvent,
   normalizeNote,
   normalizeTag,
   normalizeTags,
   originOf,
+  partitionTrash,
   planImport,
   sortNotes,
+  TRASH_RETENTION_MS,
   trimAuditLog,
 } from "./notes.js";
 
@@ -252,6 +255,9 @@ handlers["master:verify"] = async (msg) => {
   await writeMeta({ locked: false });
   bumpActivity();
   await scheduleAutoLockAlarm();
+  // Opportunistic GC: purge trash whose 30-day window expired while locked.
+  try { await purgeExpiredTrash(); }
+  catch (err) { console.warn("[auth-notes] purgeExpiredTrash on unlock failed", err); }
   return { ok: true };
 };
 
@@ -570,7 +576,11 @@ handlers["notes:duplicates"] = async () => {
   const envelopes = await readEnvelopes();
   const decrypted = [];
   for (const env of envelopes) {
-    try { decrypted.push(await decryptNote(key, env)); }
+    try {
+      const note = await decryptNote(key, env);
+      if (isTrashed(note)) continue;
+      decrypted.push(note);
+    }
     catch (err) { console.warn("[auth-notes] skip undecryptable note", env.id, err); }
   }
   const groups = findDuplicateEmails(decrypted).map((g) => ({
@@ -600,7 +610,11 @@ handlers["notes:stats"] = async () => {
   const decrypted = [];
   let undecryptable = 0;
   for (const env of envelopes) {
-    try { decrypted.push(await decryptNote(key, env)); }
+    try {
+      const note = await decryptNote(key, env);
+      if (isTrashed(note)) continue;
+      decrypted.push(note);
+    }
     catch (err) { undecryptable++; console.warn("[auth-notes] skip undecryptable note", env.id, err); }
   }
   const stats = computeVaultStats(decrypted);
@@ -619,7 +633,11 @@ handlers["notes:tags"] = async () => {
   const envelopes = await readEnvelopes();
   const decrypted = [];
   for (const env of envelopes) {
-    try { decrypted.push(await decryptNote(key, env)); }
+    try {
+      const note = await decryptNote(key, env);
+      if (isTrashed(note)) continue;
+      decrypted.push(note);
+    }
     catch (err) { console.warn("[auth-notes] skip undecryptable note", env.id, err); }
   }
   return { tags: collectTags(decrypted), presets: TAG_PRESETS };
@@ -632,7 +650,11 @@ handlers["notes:search"] = async (msg) => {
   const envelopes = await readEnvelopes();
   const decrypted = [];
   for (const env of envelopes) {
-    try { decrypted.push(await decryptNote(key, env)); }
+    try {
+      const note = await decryptNote(key, env);
+      if (isTrashed(note)) continue;
+      decrypted.push(note);
+    }
     catch (err) { console.warn("[auth-notes] skip undecryptable note", env.id, err); }
   }
   if (!q) {
@@ -700,11 +722,16 @@ handlers["notes:search"] = async (msg) => {
 handlers["notes:list"] = async (msg) => {
   const key = requireUnlocked();
   const filter = msg?.origin ? originOf(msg.origin) : null;
+  const includeTrashed = msg?.includeTrashed === true;
   const envelopes = await readEnvelopes();
   const scoped = filter ? envelopes.filter((e) => e.origin === filter) : envelopes;
   const decrypted = [];
   for (const env of scoped) {
-    try { decrypted.push(await decryptNote(key, env)); }
+    try {
+      const note = await decryptNote(key, env);
+      if (!includeTrashed && isTrashed(note)) continue;
+      decrypted.push(note);
+    }
     catch (err) { console.warn("[auth-notes] skip undecryptable note", env.id, err); }
   }
   return sortNotes(decrypted);
@@ -785,14 +812,155 @@ handlers["notes:bulkTag"] = async (msg) => {
 };
 
 handlers["notes:delete"] = async (msg) => {
-  requireUnlocked();
+  const key = requireUnlocked();
+  const id = String(msg?.id || "");
+  if (!id) throw new Error("id is required");
+  const hard = msg?.hard === true;
+  const envelopes = await readEnvelopes();
+  if (hard) {
+    const next = envelopes.filter((e) => e.id !== id);
+    await writeEnvelopes(next);
+    try { await recordAuditEvent({ type: "note:delete", noteId: id, detail: "purged from trash" }); }
+    catch (err) { console.warn("[auth-notes] audit hard-delete failed", err); }
+    return { deleted: envelopes.length - next.length, hard: true };
+  }
+  const idx = envelopes.findIndex((e) => e.id === id);
+  if (idx < 0) return { deleted: 0, hard: false };
+  let note;
+  try { note = await decryptNote(key, envelopes[idx]); }
+  catch { throw new Error("could not decrypt note"); }
+  if (isTrashed(note)) return { deleted: 0, hard: false, alreadyTrashed: true };
+  const trashed = { ...note, deletedAt: Date.now() };
+  envelopes[idx] = await encryptNote(key, trashed);
+  await writeEnvelopes(envelopes);
+  try {
+    await recordAuditEvent({
+      type: "note:delete",
+      origin: note.origin,
+      noteId: id,
+      detail: "moved to trash (30d)",
+    });
+  } catch (err) { console.warn("[auth-notes] audit soft-delete failed", err); }
+  return { deleted: 1, hard: false, deletedAt: trashed.deletedAt };
+};
+
+/**
+ * Restore a soft-deleted note: clears the `deletedAt` stamp and re-seals
+ * the record under the live key. Returns `{ restored: true }` on success or
+ * `{ restored: false, reason }` when the note is already active / not found.
+ */
+handlers["notes:restore"] = async (msg) => {
+  const key = requireUnlocked();
   const id = String(msg?.id || "");
   if (!id) throw new Error("id is required");
   const envelopes = await readEnvelopes();
-  const next = envelopes.filter((e) => e.id !== id);
-  await writeEnvelopes(next);
-  return { deleted: envelopes.length - next.length };
+  const idx = envelopes.findIndex((e) => e.id === id);
+  if (idx < 0) return { restored: false, reason: "not-found" };
+  let note;
+  try { note = await decryptNote(key, envelopes[idx]); }
+  catch { throw new Error("could not decrypt note"); }
+  if (!isTrashed(note)) return { restored: false, reason: "not-trashed" };
+  const { deletedAt: _drop, ...rest } = note;
+  void _drop;
+  envelopes[idx] = await encryptNote(key, { ...rest, updatedAt: Date.now() });
+  await writeEnvelopes(envelopes);
+  try {
+    await recordAuditEvent({
+      type: "note:update",
+      origin: note.origin,
+      noteId: id,
+      detail: "restored from trash",
+    });
+  } catch (err) { console.warn("[auth-notes] audit restore failed", err); }
+  return { restored: true, id };
 };
+
+/**
+ * List trashed notes only, newest-deletion first. Each entry carries a
+ * `ttlMs` so the popup can show “purges in X days” without recomputing.
+ */
+handlers["notes:trashList"] = async () => {
+  const key = requireUnlocked();
+  const envelopes = await readEnvelopes();
+  const decrypted = [];
+  for (const env of envelopes) {
+    try { decrypted.push(await decryptNote(key, env)); }
+    catch (err) { console.warn("[auth-notes] skip undecryptable note", env.id, err); }
+  }
+  const now = Date.now();
+  const { trashed } = partitionTrash(decrypted, { now });
+  trashed.sort((a, b) => Number(b.deletedAt || 0) - Number(a.deletedAt || 0));
+  return {
+    retentionMs: TRASH_RETENTION_MS,
+    now,
+    items: trashed.map((n) => ({
+      id: n.id,
+      origin: n.origin,
+      label: n.label || n.origin,
+      authMethod: n.authMethod || "",
+      deletedAt: Number(n.deletedAt) || 0,
+      ttlMs: Math.max(0, TRASH_RETENTION_MS - (now - Number(n.deletedAt || 0))),
+    })),
+  };
+};
+
+/**
+ * Purge expired trash. Iterates every envelope, decrypts, and drops the ones
+ * whose retention window has elapsed. Safe to call without a user gesture
+ * — the vault must still be unlocked. Called on unlock + on every auto-lock
+ * alarm tick so dormant browsers eventually GC their trash too.
+ */
+handlers["notes:purgeExpired"] = async () => purgeExpiredTrash();
+
+/**
+ * Empty the trash immediately, regardless of TTL. Returns the count purged.
+ */
+handlers["notes:purgeTrash"] = async () => {
+  const key = requireUnlocked();
+  const envelopes = await readEnvelopes();
+  const kept = [];
+  let purged = 0;
+  for (const env of envelopes) {
+    let note;
+    try { note = await decryptNote(key, env); }
+    catch { kept.push(env); continue; }
+    if (isTrashed(note)) purged++;
+    else kept.push(env);
+  }
+  if (purged > 0) await writeEnvelopes(kept);
+  try {
+    if (purged > 0) {
+      await recordAuditEvent({ type: "note:delete", detail: `emptied trash • ${purged} notes` });
+    }
+  } catch (err) { console.warn("[auth-notes] audit purgeTrash failed", err); }
+  return { purged };
+};
+
+/** Internal helper: drops trashed notes whose retention window has elapsed. */
+async function purgeExpiredTrash() {
+  if (!unlockedKey) return { purged: 0, locked: true };
+  const key = unlockedKey;
+  const envelopes = await readEnvelopes();
+  const now = Date.now();
+  const kept = [];
+  let purged = 0;
+  for (const env of envelopes) {
+    let note;
+    try { note = await decryptNote(key, env); }
+    catch { kept.push(env); continue; }
+    if (isTrashed(note) && now - Number(note.deletedAt) >= TRASH_RETENTION_MS) {
+      purged++;
+      continue;
+    }
+    kept.push(env);
+  }
+  if (purged > 0) {
+    await writeEnvelopes(kept);
+    try { await recordAuditEvent({ type: "note:delete", detail: `auto-purged ${purged} expired trash entries` }); }
+    catch (err) { console.warn("[auth-notes] audit auto-purge failed", err); }
+  }
+  return { purged };
+}
 
 /**
  * Toggle (or set) the `pinned` flag on a note. Pinned notes float to the top

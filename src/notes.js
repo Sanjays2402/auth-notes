@@ -345,7 +345,53 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
   if (input.pinned === true || input.pinned === "true" || input.pinned === 1) {
     record.pinned = true;
   }
+  if (Number.isFinite(input.deletedAt) && Number(input.deletedAt) > 0) {
+    // Clamp to `now` so a forged future timestamp can't keep a note in trash
+    // past the 30-day retention window.
+    record.deletedAt = Math.min(Number(input.deletedAt), now);
+  }
   return record;
+}
+
+/** Soft-delete retention: how long a trashed note lingers before becoming
+ *  eligible for permanent purge. 30 days in milliseconds. */
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** True when a decrypted note carries a non-zero `deletedAt` stamp. Trashed
+ *  notes are hidden from the main vault but kept sealed at rest until they
+ *  are restored or permanently purged. */
+export function isTrashed(note) {
+  if (!note || typeof note !== "object") return false;
+  const t = Number(note.deletedAt);
+  return Number.isFinite(t) && t > 0;
+}
+
+/** Partition a list of decrypted notes into `active`, `trashed`, and
+ *  `expired` buckets. `expired` is the subset of `trashed` whose retention
+ *  window has elapsed and is therefore eligible for hard purge. */
+export function partitionTrash(notes, { now = Date.now(), retentionMs = TRASH_RETENTION_MS } = {}) {
+  const list = Array.isArray(notes) ? notes : [];
+  const active = [];
+  const trashed = [];
+  const expired = [];
+  for (const n of list) {
+    if (!n || typeof n !== "object") continue;
+    if (isTrashed(n)) {
+      trashed.push(n);
+      if (now - Number(n.deletedAt) >= retentionMs) expired.push(n);
+    } else {
+      active.push(n);
+    }
+  }
+  return { active, trashed, expired };
+}
+
+/** Compute the time remaining (ms) before a trashed note auto-purges. Returns
+ *  0 for items past the window. Non-trashed notes return null. */
+export function trashTtlMs(note, { now = Date.now(), retentionMs = TRASH_RETENTION_MS } = {}) {
+  if (!isTrashed(note)) return null;
+  const left = retentionMs - (now - Number(note.deletedAt));
+  return left > 0 ? left : 0;
 }
 
 /** Apply a bulk tag mutation to a note: returns a new note with `add` tags
