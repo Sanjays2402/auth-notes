@@ -30,7 +30,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Change master password (re-encrypt vault)
 - [x] Auto-fill detected email into login forms (content script, opt-in)
 - [x] Per-note custom fields (key/value pairs)
-- [ ] Markdown rendering in note body with safe sanitizer
+- [x] Markdown rendering in note body with safe sanitizer
 - [ ] Vault statistics dashboard (totals, 2FA coverage, oldest note)
 - [ ] Pinned notes section at top of list
 - [ ] Trash/restore flow with 30-day soft delete

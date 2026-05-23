@@ -1,5 +1,7 @@
 // Auth Notes — popup entry point
 
+import { renderMarkdown, markdownToText } from "./markdown.js";
+
 const THEME_MEDIA = window.matchMedia("(prefers-color-scheme: light)");
 let themePref = "auto"; // "auto" | "dark" | "light"
 
@@ -1653,7 +1655,26 @@ function renderMatch(note) {
     : "";
   showRow("match-row-2fa", "match-2fa", twofa);
   showRow("match-row-pw", "match-pw", formatPasswordHint(note.passwordHint));
-  showRow("match-row-notes", "match-notes", note.notes);
+  // Render the freeform note body as sanitized markdown. We treat the row as
+  // hidden whenever the body has no visible content after stripping syntax,
+  // so a note containing only ``` fences doesn't leave a stray empty row.
+  {
+    const row = document.getElementById("match-row-notes");
+    const target = document.getElementById("match-notes");
+    if (row && target) {
+      const body = String(note.notes || "");
+      const probe = markdownToText(body);
+      if (probe) {
+        target.classList.add("markdown-body");
+        target.innerHTML = renderMarkdown(body);
+        row.hidden = false;
+      } else {
+        target.classList.remove("markdown-body");
+        target.textContent = "";
+        row.hidden = true;
+      }
+    }
+  }
   renderRecoveryCodes(Array.isArray(note.recoveryCodes) ? note.recoveryCodes : []);
   renderMatchCustomFields(Array.isArray(note.customFields) ? note.customFields : []);
 

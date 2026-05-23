@@ -637,4 +637,43 @@ if (!_cfPopupCss.includes(".custom-field-row") || !_cfPopupCss.includes(".custom
   console.error("popup.css missing custom-field styles"); process.exit(1);
 }
 
+// --- Markdown rendering + sanitizer ---------------------------------
+const md = await import("../src/markdown.js");
+if (typeof md.renderMarkdown !== "function" || typeof md.sanitizeUrl !== "function") {
+  console.error("markdown module missing exports"); process.exit(1);
+}
+if (md.sanitizeUrl("javascript:alert(1)") !== null) {
+  console.error("sanitizeUrl should reject javascript: URLs"); process.exit(1);
+}
+if (md.sanitizeUrl("data:text/html,foo") !== null) {
+  console.error("sanitizeUrl should reject data: URLs"); process.exit(1);
+}
+if (md.sanitizeUrl("https://example.com/x?a=1&b=2") !== "https://example.com/x?a=1&b=2") {
+  console.error("sanitizeUrl should pass https"); process.exit(1);
+}
+const rendered = md.renderMarkdown("# Title\n\nHello **world** with <script>alert(1)</script> and a [link](javascript:alert(1)) plus [ok](https://example.com).\n\n- one\n- two\n\n```\n<b>raw</b>\n```");
+if (rendered.includes("<script>") || rendered.toLowerCase().includes("javascript:")) {
+  console.error("markdown leaked unsafe content:", rendered); process.exit(1);
+}
+if (!rendered.includes("<h1") || !rendered.includes("<strong>world</strong>")) {
+  console.error("markdown failed to render headings/bold:", rendered); process.exit(1);
+}
+if (!rendered.includes('href="https://example.com"') || !rendered.includes('rel="noopener noreferrer"')) {
+  console.error("markdown link not rendered safely:", rendered); process.exit(1);
+}
+if (!rendered.includes("<ul") || !rendered.includes("<li>one</li>")) {
+  console.error("markdown list rendering wrong:", rendered); process.exit(1);
+}
+if (!rendered.includes("&lt;b&gt;raw&lt;/b&gt;")) {
+  console.error("markdown code fence not escaped:", rendered); process.exit(1);
+}
+const mdPopupJs = fs.readFileSync("src/popup.js", "utf8");
+if (!mdPopupJs.includes("renderMarkdown") || !mdPopupJs.includes("markdown-body")) {
+  console.error("popup.js not wired to markdown renderer"); process.exit(1);
+}
+const mdPopupCss = fs.readFileSync("src/popup.css", "utf8");
+if (!mdPopupCss.includes(".markdown-body")) {
+  console.error("popup.css missing markdown-body styles"); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");
