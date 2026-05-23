@@ -1554,6 +1554,7 @@ function renderMatch(note) {
   };
   showRow("match-row-email", "match-email", note.email);
   updateEmailCopyButton(note.email || "");
+  updateEmailFillButton(note);
   const twofa = note.twofaBackup && note.twofaBackup !== "none"
     ? (note.twofaDetail ? `${prettyBackup(note.twofaBackup)} — ${note.twofaDetail}` : prettyBackup(note.twofaBackup))
     : "";
@@ -1695,6 +1696,98 @@ function bindEmailCopy() {
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     copyEmailWithAutoClear();
+  });
+}
+
+// --- Auto-fill (opt-in) --------------------------------------------
+// The popup never injects directly. It asks the background service worker
+// to inject the value via chrome.scripting, after the SW has re-verified
+// the vault is unlocked and the active tab matches the note's origin.
+
+let autofillFeatureEnabled = false;
+
+function setAutofillFeatureEnabled(on) {
+  autofillFeatureEnabled = !!on;
+  // Re-render the fill button against whatever note (if any) is currently
+  // showing in the match view. dataset.note is stamped by updateEmailFillButton.
+  const btn = document.getElementById("match-email-fill");
+  if (!btn) return;
+  if (!autofillFeatureEnabled) { btn.hidden = true; return; }
+  // Re-evaluate from the stamped dataset if present.
+  const value = btn.dataset.email || "";
+  btn.hidden = !value;
+}
+
+function updateEmailFillButton(note) {
+  const btn = document.getElementById("match-email-fill");
+  if (!btn) return;
+  const email = String(note?.email || "").trim();
+  if (!autofillFeatureEnabled || !email || !note?.id) {
+    btn.hidden = true;
+    btn.dataset.state = "idle";
+    btn.dataset.email = "";
+    btn.dataset.noteId = "";
+    const label = document.getElementById("match-email-fill-label");
+    if (label) label.textContent = "Fill";
+    return;
+  }
+  btn.hidden = false;
+  btn.dataset.state = "idle";
+  btn.dataset.email = email;
+  btn.dataset.noteId = String(note.id);
+  const label = document.getElementById("match-email-fill-label");
+  if (label) label.textContent = "Fill";
+}
+
+function setFillButtonState(state, labelText, resetMs = 2400) {
+  const btn = document.getElementById("match-email-fill");
+  if (!btn) return;
+  btn.dataset.state = state;
+  const label = document.getElementById("match-email-fill-label");
+  if (label) label.textContent = labelText;
+  if (state !== "idle") {
+    setTimeout(() => {
+      if (btn.dataset.state === state) {
+        btn.dataset.state = "idle";
+        if (label) label.textContent = "Fill";
+      }
+    }, resetMs);
+  }
+}
+
+async function autofillCurrentTab() {
+  const btn = document.getElementById("match-email-fill");
+  if (!btn || btn.hidden) return;
+  const noteId = btn.dataset.noteId || "";
+  if (!noteId) return;
+  const tab = await currentTab();
+  if (!tab?.id || !isSupportedUrl(tab.url)) {
+    setFillButtonState("error", "No page");
+    return;
+  }
+  let host = "";
+  try { host = new URL(tab.url).hostname.toLowerCase(); } catch { /* unreachable */ }
+  btn.animate(
+    [{ transform: "scale(1)" }, { transform: "scale(0.94)" }, { transform: "scale(1)" }],
+    { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+  );
+  setFillButtonState("busy", "Filling…", 6000);
+  try {
+    const res = await send("notes:autofill", { id: noteId, tabId: tab.id, tabOrigin: host });
+    setFillButtonState("copied", res?.target ? `Filled → ${res.target}` : "Filled");
+  } catch (err) {
+    const msg = String(err?.message || err);
+    console.warn("[auth-notes] autofill failed", msg);
+    setFillButtonState("error", msg.length > 28 ? "Failed" : msg);
+  }
+}
+
+function bindEmailFill() {
+  const btn = document.getElementById("match-email-fill");
+  if (!btn) return;
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    autofillCurrentTab();
   });
 }
 
@@ -1984,6 +2077,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load persisted pref ASAP (best effort).
   send("settings:get").then((s) => {
     if (s?.theme) setThemePref(s.theme);
+    setAutofillFeatureEnabled(!!s?.autofillEnabled);
   }).catch(() => { /* not unlocked or background asleep; keep auto */ });
 
   bindStrength();
@@ -1991,6 +2085,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindFaviconErrors();
   bindRecoveryReveal();
   bindEmailCopy();
+  bindEmailFill();
   bindSetupForm();
   bindUnlockForm();
   bindSettings();

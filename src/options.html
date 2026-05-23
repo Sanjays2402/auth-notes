@@ -98,6 +98,21 @@
       </div>
     </section>
 
+    <section class="glass card" id="card-autofill">
+      <header class="card-head">
+        <h2 class="card-title">Auto-fill (opt-in)</h2>
+        <p class="card-sub">When enabled, a <em>Fill</em> button appears next to the saved email in the popup. Clicking it injects the email into the most plausible login field on the current tab. The vault must be unlocked, and the tab's origin must match the saved note's origin.</p>
+      </header>
+      <div class="card-body">
+        <label class="toggle">
+          <input id="opt-autofill" type="checkbox">
+          <span class="toggle-track" aria-hidden="true"><span class="toggle-knob"></span></span>
+          <span class="toggle-label">Allow auto-fill into the active tab</span>
+        </label>
+        <p class="hint" id="autofill-saved" hidden>Saved.</p>
+      </div>
+    </section>
+
     <section class="glass card" id="card-kdf">
       <header class="card-head">
         <h2 class="card-title">Master key derivation</h2>

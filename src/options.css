@@ -328,3 +328,57 @@ body[data-theme="light"] .seg-pill {
 .meta-row:last-child { border-bottom: 0; }
 .meta-row dt { color: var(--text-mute); margin: 0; }
 .meta-row dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* Toggle switch (used by the auto-fill opt-in) */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  font-weight: 500;
+}
+.toggle > input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.toggle-track {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  transition: background 220ms cubic-bezier(0.16, 1, 0.3, 1), border-color 220ms;
+  flex: 0 0 auto;
+}
+.toggle-knob {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-mute);
+  transform: translateY(-50%);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), background 220ms;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.toggle > input:checked + .toggle-track {
+  background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+  border-color: transparent;
+}
+.toggle > input:checked + .toggle-track .toggle-knob {
+  transform: translate(15px, -50%);
+  background: #fff;
+}
+.toggle > input:focus-visible + .toggle-track {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 3px;
+}
+.toggle-label { letter-spacing: -0.01em; }

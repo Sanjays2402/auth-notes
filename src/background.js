@@ -67,6 +67,9 @@ const DEFAULT_SETTINGS = Object.freeze({
   theme: DEFAULT_THEME,
   pbkdf2Iterations: PBKDF2_ITERATIONS,
   onboardingDoneAt: null,
+  // Auto-fill is OFF by default. The user must opt in from the options page
+  // before any note data leaves the popup process for the active tab.
+  autofillEnabled: false,
 });
 
 // In-memory only. Never persisted. Cleared on SW termination or lock.
@@ -129,6 +132,9 @@ function sanitizeSettings(patch) {
       const n = Math.floor(Number(v));
       out.onboardingDoneAt = Number.isFinite(n) && n > 0 ? n : Date.now();
     }
+  }
+  if (patch && patch.autofillEnabled !== undefined) {
+    out.autofillEnabled = !!patch.autofillEnabled;
   }
   if (patch && patch.pbkdf2Iterations !== undefined) {
     const n = Math.floor(Number(patch.pbkdf2Iterations));
@@ -802,6 +808,130 @@ handlers["notes:touch"] = async (msg) => {
   envelopes[idx] = await encryptNote(key, bumped);
   await writeEnvelopes(envelopes);
   return { touched: true, lastUsedAt: bumped.lastUsedAt };
+};
+
+// --- Auto-fill (opt-in) ------------------------------------------------
+// Injects a single function into the active tab via chrome.scripting which
+// finds the most plausible email/username field on the page and types the
+// value into it. The function is fully self-contained — no closures over
+// vault state — so the only thing crossing the extension/page boundary is
+// the literal email string the user already sees in the popup.
+//
+// Gated on: (a) `autofillEnabled` setting being explicitly true, (b) vault
+// unlocked, (c) the requested tab's origin matches the note's origin so a
+// hijacked popup cannot exfiltrate via cross-site injection.
+function autofillInjected(value) {
+  if (!value) return { ok: false, reason: "no-value" };
+  const isVisible = (el) => {
+    if (!el || el.disabled || el.readOnly) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return false;
+    const s = getComputedStyle(el);
+    return s.visibility !== "hidden" && s.display !== "none" && Number(s.opacity) > 0.05;
+  };
+  const scoreField = (el) => {
+    const type = (el.type || "").toLowerCase();
+    if (type === "password" || type === "hidden" || type === "submit" || type === "button") return -1;
+    let s = 0;
+    if (type === "email") s += 100;
+    if (type === "text" || type === "" || type === "search" || type === "tel") s += 5;
+    const hay = [el.name, el.id, el.placeholder, el.autocomplete, el.getAttribute?.("aria-label"), el.getAttribute?.("data-testid")]
+      .filter(Boolean).join(" ").toLowerCase();
+    if (/(^|[^a-z])email([^a-z]|$)/.test(hay)) s += 80;
+    if (/username|login|userid|user[-_ ]?name/.test(hay)) s += 40;
+    if (/account|identifier/.test(hay)) s += 20;
+    if (el.autocomplete === "email" || el.autocomplete === "username") s += 60;
+    if (el.required) s += 5;
+    // Penalise obviously-wrong matches.
+    if (/search|query|coupon|promo|otp|code/.test(hay)) s -= 30;
+    return s;
+  };
+  const candidates = Array.from(document.querySelectorAll('input, [contenteditable="true"]'))
+    .filter(isVisible);
+  let best = null;
+  let bestScore = -Infinity;
+  for (const el of candidates) {
+    const s = scoreField(el);
+    if (s > bestScore) { bestScore = s; best = el; }
+  }
+  if (!best || bestScore < 5) return { ok: false, reason: "no-target" };
+  try {
+    if (best.isContentEditable) {
+      best.focus();
+      best.textContent = value;
+      best.dispatchEvent(new InputEvent("input", { bubbles: true, data: value, inputType: "insertReplacementText" }));
+      best.dispatchEvent(new Event("change", { bubbles: true }));
+    } else {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      best.focus();
+      // Use the native setter so React/Vue/Svelte detect the change.
+      if (setter) setter.call(best, value); else best.value = value;
+      best.dispatchEvent(new Event("input", { bubbles: true }));
+      best.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  } catch (err) {
+    return { ok: false, reason: "dom-error", error: String(err && err.message || err) };
+  }
+  const label = best.name || best.id || best.getAttribute?.("aria-label") || best.placeholder || "field";
+  return { ok: true, target: String(label).slice(0, 80), score: bestScore };
+}
+
+handlers["notes:autofill"] = async (msg) => {
+  const key = requireUnlocked();
+  const settings = await readSettings();
+  if (!settings.autofillEnabled) {
+    throw new Error("auto-fill is disabled");
+  }
+  const id = String(msg?.id || "");
+  const tabId = Number(msg?.tabId);
+  const tabOrigin = String(msg?.tabOrigin || "").toLowerCase();
+  if (!id) throw new Error("id is required");
+  if (!Number.isFinite(tabId) || tabId < 0) throw new Error("tabId is required");
+  if (!tabOrigin) throw new Error("tabOrigin is required");
+
+  const envelopes = await readEnvelopes();
+  const env = envelopes.find((e) => e.id === id);
+  if (!env) throw new Error("note not found");
+  const note = await decryptNote(key, env);
+  const email = String(note.email || "").trim();
+  if (!email) throw new Error("this note has no email saved");
+  // Bind the injection to the exact origin we expect — refuse cross-site.
+  const noteHost = String(note.origin || "").toLowerCase();
+  if (!noteHost || (tabOrigin !== noteHost && !tabOrigin.endsWith("." + noteHost))) {
+    throw new Error("current tab doesn't match this note's site");
+  }
+
+  if (!chrome.scripting?.executeScript) {
+    throw new Error("scripting API unavailable");
+  }
+  let results;
+  try {
+    results = await chrome.scripting.executeScript({
+      target: { tabId },
+      args: [email],
+      func: autofillInjected,
+    });
+  } catch (err) {
+    throw new Error(`couldn't inject autofill: ${err?.message || err}`);
+  }
+  const result = results?.[0]?.result || { ok: false, reason: "no-result" };
+  try {
+    await recordAuditEvent({
+      type: "note:view",
+      origin: noteHost,
+      noteId: id,
+      detail: result.ok ? `autofilled email → ${result.target}` : `autofill skipped (${result.reason})`,
+    });
+  } catch (err) { console.warn("[auth-notes] audit autofill failed", err); }
+  if (!result.ok) {
+    throw new Error(
+      result.reason === "no-target"
+        ? "no email/username field found on this page"
+        : `autofill failed (${result.reason})`,
+    );
+  }
+  bumpActivity();
+  return { ok: true, target: result.target };
 };
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

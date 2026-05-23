@@ -264,6 +264,24 @@ function bindMeta(meta, status) {
   }
 }
 
+// --- Autofill toggle -----------------------------------------------------
+function bindAutofillToggle(initial) {
+  const cb = $("opt-autofill");
+  const status = $("autofill-saved");
+  if (!cb) return;
+  cb.checked = !!initial;
+  cb.addEventListener("change", async () => {
+    const enabled = !!cb.checked;
+    try {
+      await send("settings:set", { settings: { autofillEnabled: enabled } });
+      if (status) flashSaved(status, enabled ? "Auto-fill enabled." : "Auto-fill disabled.");
+    } catch (err) {
+      cb.checked = !enabled;
+      if (status) flashErr(status, err.message || "Couldn't save.");
+    }
+  });
+}
+
 // --- Boot -----------------------------------------------------------------
 async function boot() {
   try {
@@ -274,6 +292,7 @@ async function boot() {
     ]);
     bindTheme(settings.theme || "auto");
     bindIdle(settings.idleTimeoutMin ?? 5);
+    bindAutofillToggle(!!settings.autofillEnabled);
     bindKdf(settings);
     bindChangePassword();
     bindMeta(meta, status);

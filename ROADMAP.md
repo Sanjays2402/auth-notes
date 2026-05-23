@@ -28,7 +28,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Duplicate-email detector across sites (security hygiene)
 - [x] Onboarding tour for first unlock
 - [x] Change master password (re-encrypt vault)
-- [ ] Auto-fill detected email into login forms (content script, opt-in)
+- [x] Auto-fill detected email into login forms (content script, opt-in)
 - [ ] Per-note custom fields (key/value pairs)
 - [ ] Markdown rendering in note body with safe sanitizer
 - [ ] Vault statistics dashboard (totals, 2FA coverage, oldest note)
