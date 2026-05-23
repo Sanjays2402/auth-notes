@@ -852,4 +852,93 @@ if (!histPopupCss.includes(".history-block") || !histPopupCss.includes(".history
   console.error("popup.css missing history styles"); process.exit(1);
 }
 
+// --- Per-note attachments (encrypted blobs) -----------------------
+if (typeof notes.normalizeAttachment !== "function" || typeof notes.normalizeAttachments !== "function") {
+  console.error("attachment helpers missing from notes.js"); process.exit(1);
+}
+if (notes.ATTACHMENT_MAX_COUNT !== 4 || notes.ATTACHMENT_BYTES_MAX !== 256 * 1024) {
+  console.error("attachment caps drift"); process.exit(1);
+}
+if (!Array.isArray(notes.ATTACHMENT_ALLOWED_MIME) || !notes.ATTACHMENT_ALLOWED_MIME.includes("image/png")) {
+  console.error("attachment MIME allowlist missing"); process.exit(1);
+}
+if (!notes.ENVELOPE_FORBIDDEN_KEYS.includes("attachments")) {
+  console.error("attachments must be a forbidden envelope key"); process.exit(1);
+}
+let attachLeakRejected = false;
+try { notes.assertEnvelopeSealed({ ...env, attachments: [{ name: "x.png" }] }); }
+catch { attachLeakRejected = true; }
+if (!attachLeakRejected) { console.error("attachments must not appear on envelope"); process.exit(1); }
+
+// 4x4 PNG header + ~20 bytes — valid base64, valid MIME.
+const tinyPngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAQAAAAmkwkpAAAADklEQVR42mNkYGBgYAAAAA0AAY3F6lEAAAAASUVORK5CYII=";
+const goodAttachment = { name: "codes.png", mimeType: "image/png", data: tinyPngB64, size: 95 };
+const normGood = notes.normalizeAttachment(goodAttachment);
+if (!normGood || normGood.mimeType !== "image/png" || !normGood.size) {
+  console.error("normalizeAttachment rejected a valid PNG", normGood); process.exit(1);
+}
+if (notes.normalizeAttachment({ name: "x", mimeType: "application/octet-stream", data: tinyPngB64 }) !== null) {
+  console.error("normalizeAttachment should reject disallowed MIME"); process.exit(1);
+}
+if (notes.normalizeAttachment({ name: "x", mimeType: "image/png", data: "" }) !== null) {
+  console.error("normalizeAttachment should reject empty data"); process.exit(1);
+}
+const tooBig = { name: "big.png", mimeType: "image/png", data: tinyPngB64, size: notes.ATTACHMENT_BYTES_MAX + 1 };
+if (notes.normalizeAttachment(tooBig) !== null) {
+  console.error("normalizeAttachment should reject oversize entries"); process.exit(1);
+}
+
+const manyEntries = Array.from({ length: 10 }, (_, i) => ({
+  name: `n${i}.png`, mimeType: "image/png", data: tinyPngB64, size: 100,
+}));
+const capped = notes.normalizeAttachments(manyEntries);
+if (capped.length !== notes.ATTACHMENT_MAX_COUNT) {
+  console.error("normalizeAttachments did not cap by count", capped.length); process.exit(1);
+}
+const noteWithAtt = notes.normalizeNote({
+  origin: "att.test", authMethod: "password", label: "Att",
+  attachments: [goodAttachment],
+});
+if (!Array.isArray(noteWithAtt.attachments) || noteWithAtt.attachments.length !== 1) {
+  console.error("normalizeNote did not carry attachments"); process.exit(1);
+}
+const attEnv = await notes.encryptNote(key, noteWithAtt);
+notes.assertEnvelopeSealed(attEnv);
+const attEnvJson = JSON.stringify(attEnv);
+if (attEnvJson.includes(tinyPngB64) || attEnvJson.includes("codes.png") || attEnvJson.includes("attachments")) {
+  console.error("attachment data leaked into envelope"); process.exit(1);
+}
+const attBack = await notes.decryptNote(key, attEnv);
+if (!Array.isArray(attBack.attachments) || attBack.attachments[0].data !== tinyPngB64) {
+  console.error("attachment did not survive round-trip"); process.exit(1);
+}
+
+// Diff entry for attachments must be opaque (no leaking base64 in history).
+const attPrev = notes.normalizeNote({ origin: "att.test", authMethod: "password", label: "Att" });
+const attNext = notes.normalizeNote({
+  ...attPrev, createdAt: attPrev.createdAt,
+  attachments: [goodAttachment],
+}, { now: attPrev.updatedAt + 1000 });
+const attDiff = notes.diffNoteFields(attPrev, attNext);
+const attDiffEntry = attDiff.find((c) => c.field === "attachments");
+if (!attDiffEntry || attDiffEntry.changed !== true || "from" in attDiffEntry || "to" in attDiffEntry) {
+  console.error("attachments diff must be opaque", attDiffEntry); process.exit(1);
+}
+if (!notes.HISTORY_TRACKED_FIELDS.includes("attachments")) {
+  console.error("attachments must be in HISTORY_TRACKED_FIELDS"); process.exit(1);
+}
+
+const attPopupHtml = fs.readFileSync("src/popup.html", "utf8");
+for (const needle of ["quick-attachments-list", "quick-attachments-input", "match-row-attachments", "match-attachments-list", "match-attachments-toggle"]) {
+  if (!attPopupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+const attPopupJs = fs.readFileSync("src/popup.js", "utf8");
+for (const needle of ["renderMatchAttachments", "quickAttachments", "handleQuickAttachmentFiles", "ATTACHMENT_MAX_COUNT"]) {
+  if (!attPopupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+const attPopupCss = fs.readFileSync("src/popup.css", "utf8");
+for (const needle of [".attachment-row", ".attachments-readout", ".attachment-thumb"]) {
+  if (!attPopupCss.includes(needle)) { console.error("popup.css missing", needle); process.exit(1); }
+}
+
 console.log("\u2713 smoke ok");

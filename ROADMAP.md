@@ -37,3 +37,13 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Quick filter chips by auth method (password, passkey, OAuth, SSO)
 - [x] Per-site security checklist (2FA on?, unique email?, recovery codes saved?)
 - [x] Encrypted notes diff history (last 5 edits per note)
+- [x] Per-note attachment slots for recovery code screenshots (encrypted blobs)
+- [ ] Quick lock keyboard shortcut (Cmd/Ctrl+Shift+L)
+- [ ] Vault health score with weighted security signals
+- [ ] Per-site notes printable view (paper-friendly, no glass)
+- [ ] Inline QR code generator for 2FA backup URIs (offline)
+- [ ] Per-note expiry reminder with badge notification
+- [ ] Right-click context menu to add note for current page
+- [ ] Sticky favorite tags pinned in filter bar
+- [ ] Encrypted JSON export with selective tag scope
+- [ ] Per-site reused-password warning chip (length + bucket match)

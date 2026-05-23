@@ -286,6 +286,26 @@
                 <ul id="match-fields-list" class="custom-fields-readout"></ul>
               </dd>
             </div>
+            <div class="match-row" id="match-row-attachments" hidden>
+              <dt>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 6"/>
+                </svg>
+                <span>Attachments</span>
+              </dt>
+              <dd>
+                <ul id="match-attachments-list" class="attachments-readout" data-revealed="false"></ul>
+                <div class="attachments-actions">
+                  <button type="button" id="match-attachments-toggle" class="btn-secondary btn-compact" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <span class="btn-label" data-show="Reveal" data-hide="Hide">Reveal</span>
+                  </button>
+                </div>
+              </dd>
+            </div>
             <div class="match-row" id="match-row-notes" hidden>
               <dt>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -480,6 +500,21 @@
           <div class="input-wrap textarea-wrap">
             <textarea id="quick-codes" rows="4" spellcheck="false" autocomplete="off" placeholder="abcd-1234
 efgh-5678"></textarea>
+          </div>
+        </fieldset>
+        <fieldset class="field field-fieldset" id="quick-attachments-fieldset">
+          <legend class="field-label">Attachments (optional)</legend>
+          <p class="field-hint">Recovery code screenshots or short PDFs. Up to 4 files, 256 KiB each. Sealed in the AES-GCM payload, never uploaded anywhere.</p>
+          <div id="quick-attachments-list" class="attachments-list"></div>
+          <div class="attachments-row">
+            <label class="btn-secondary btn-compact attachments-pick" for="quick-attachments-input">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              <span class="btn-label">Add file</span>
+            </label>
+            <input id="quick-attachments-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain" multiple hidden>
+            <span id="quick-attachments-status" class="attachments-status" aria-live="polite"></span>
           </div>
         </fieldset>
         <fieldset class="field field-fieldset" id="quick-fields-fieldset">

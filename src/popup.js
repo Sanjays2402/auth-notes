@@ -1691,6 +1691,156 @@ function renderMatchCustomFields(fields) {
   `).join("");
 }
 
+// --- Attachments (encrypted blobs like recovery-code screenshots) ---
+// All blobs live inside the AES-GCM payload. We render a thumbnail for
+// images and a typed pill for other MIME types. The match view masks
+// previews behind a reveal toggle so a shoulder-surfer can't glance at
+// a recovery-code screenshot.
+const ATTACHMENT_MAX_COUNT = 4;
+const ATTACHMENT_BYTES_MAX = 256 * 1024;
+const ATTACHMENT_TOTAL_BYTES_MAX = 512 * 1024;
+const ATTACHMENT_ALLOWED_MIME = new Set([
+  "image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf", "text/plain",
+]);
+
+let quickAttachments = [];
+
+function formatBytes(n) {
+  const x = Number(n) || 0;
+  if (x < 1024) return `${x} B`;
+  if (x < 1024 * 1024) return `${(x / 1024).toFixed(1)} KiB`;
+  return `${(x / (1024 * 1024)).toFixed(2)} MiB`;
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error("read failed"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function renderQuickAttachments() {
+  const list = document.getElementById("quick-attachments-list");
+  if (!list) return;
+  list.innerHTML = "";
+  quickAttachments.forEach((att, idx) => {
+    const row = document.createElement("div");
+    row.className = "attachment-row";
+    const thumb = att.mimeType?.startsWith("image/") && att.data
+      ? `<img alt="" src="data:${att.mimeType};base64,${att.data}">`
+      : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>`;
+    row.innerHTML = `
+      <div class="attachment-thumb">${thumb}</div>
+      <div class="attachment-meta">
+        <span class="attachment-name">${escapeHtml(att.name)}</span>
+        <span class="attachment-sub">${escapeHtml(att.mimeType)} \u2022 ${formatBytes(att.size)}</span>
+      </div>
+      <button type="button" class="icon-btn attachment-remove" aria-label="Remove attachment">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 6l12 12"/><path d="M18 6l-12 12"/>
+        </svg>
+      </button>
+    `;
+    row.querySelector(".attachment-remove")?.addEventListener("click", () => {
+      quickAttachments.splice(idx, 1);
+      renderQuickAttachments();
+      setQuickAttachmentStatus("");
+    });
+    list.appendChild(row);
+  });
+}
+
+function setQuickAttachmentStatus(text, tone = "info") {
+  const el = document.getElementById("quick-attachments-status");
+  if (!el) return;
+  el.textContent = text || "";
+  if (tone === "error") el.dataset.tone = "error";
+  else delete el.dataset.tone;
+}
+
+async function handleQuickAttachmentFiles(files) {
+  const arr = Array.from(files || []);
+  if (arr.length === 0) return;
+  let added = 0;
+  let totalBytes = quickAttachments.reduce((sum, a) => sum + (a.size || 0), 0);
+  let firstError = "";
+  for (const file of arr) {
+    if (quickAttachments.length >= ATTACHMENT_MAX_COUNT) {
+      firstError = firstError || `Up to ${ATTACHMENT_MAX_COUNT} files.`;
+      break;
+    }
+    if (!ATTACHMENT_ALLOWED_MIME.has(file.type)) {
+      firstError = firstError || `Unsupported type: ${file.type || "unknown"}.`;
+      continue;
+    }
+    if (file.size > ATTACHMENT_BYTES_MAX) {
+      firstError = firstError || `${file.name || "file"} exceeds ${formatBytes(ATTACHMENT_BYTES_MAX)}.`;
+      continue;
+    }
+    if (totalBytes + file.size > ATTACHMENT_TOTAL_BYTES_MAX) {
+      firstError = firstError || `Total size capped at ${formatBytes(ATTACHMENT_TOTAL_BYTES_MAX)}.`;
+      break;
+    }
+    try {
+      const data = await blobToBase64(file);
+      quickAttachments.push({
+        name: file.name || (file.type.startsWith("image/") ? "screenshot" : "file"),
+        mimeType: file.type,
+        data,
+        size: file.size,
+        addedAt: Date.now(),
+      });
+      totalBytes += file.size;
+      added++;
+    } catch (err) {
+      firstError = firstError || "Could not read file.";
+      console.warn("[auth-notes] attachment read failed", err);
+    }
+  }
+  renderQuickAttachments();
+  if (firstError) setQuickAttachmentStatus(firstError, "error");
+  else if (added > 0) setQuickAttachmentStatus(`${added} attached \u2022 ${formatBytes(totalBytes)} used`);
+  else setQuickAttachmentStatus("");
+}
+
+function renderMatchAttachments(attachments) {
+  const row = document.getElementById("match-row-attachments");
+  const list = document.getElementById("match-attachments-list");
+  if (!row || !list) return;
+  const arr = Array.isArray(attachments) ? attachments.filter((a) => a && a.data) : [];
+  if (arr.length === 0) { row.hidden = true; list.innerHTML = ""; list.dataset.revealed = "false"; return; }
+  row.hidden = false;
+  list.dataset.revealed = list.dataset.revealed === "true" ? "true" : "false";
+  list.innerHTML = arr.map((att) => {
+    const isImage = String(att.mimeType || "").startsWith("image/");
+    const thumb = isImage
+      ? `<img alt="" src="data:${escapeHtml(att.mimeType)};base64,${escapeHtml(att.data)}">`
+      : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>`;
+    return `
+      <li class="attachment-readout-row">
+        <div class="attachment-thumb">${thumb}</div>
+        <div class="attachment-meta">
+          <span class="attachment-name">${escapeHtml(att.name)}</span>
+          <span class="attachment-sub">${escapeHtml(att.mimeType)} \u2022 ${formatBytes(att.size)}</span>
+        </div>
+      </li>
+    `;
+  }).join("");
+  const toggle = document.getElementById("match-attachments-toggle");
+  if (toggle) {
+    const lbl = toggle.querySelector(".btn-label");
+    const revealed = list.dataset.revealed === "true";
+    toggle.setAttribute("aria-pressed", revealed ? "true" : "false");
+    if (lbl) lbl.textContent = revealed ? (lbl.dataset.hide || "Hide") : (lbl.dataset.show || "Reveal");
+  }
+}
+
 async function openQuickAdd({ note = null, prefillOrigin = "" } = {}) {
   show("view-quick-add");
   setQuickError("");
@@ -1714,6 +1864,9 @@ async function openQuickAdd({ note = null, prefillOrigin = "" } = {}) {
   setVal("quick-notes", note?.notes || "");
   setVal("quick-codes", Array.isArray(note?.recoveryCodes) ? note.recoveryCodes.join("\n") : "");
   renderQuickCustomFields(Array.isArray(note?.customFields) ? note.customFields : []);
+  quickAttachments = Array.isArray(note?.attachments) ? note.attachments.map((a) => ({ ...a })) : [];
+  renderQuickAttachments();
+  setQuickAttachmentStatus("");
   // Password-strength hint fields.
   const hint = note?.passwordHint || null;
   setVal("quick-pw-length", hint?.length ? String(hint.length) : "");
@@ -1754,6 +1907,14 @@ async function startQuickAddFromCurrentTab() {
 }
 
 function bindQuickAdd() {
+  const attInput = document.getElementById("quick-attachments-input");
+  attInput?.addEventListener("change", async (ev) => {
+    const files = ev.target?.files;
+    if (!files || files.length === 0) return;
+    setQuickAttachmentStatus("Reading\u2026");
+    try { await handleQuickAttachmentFiles(files); }
+    finally { if (attInput) attInput.value = ""; }
+  });
   const fieldsAdd = document.getElementById("quick-fields-add");
   fieldsAdd?.addEventListener("click", () => {
     appendQuickCustomFieldRow("", "");
@@ -1829,6 +1990,7 @@ function bindQuickAdd() {
       notes: document.getElementById("quick-notes").value,
       recoveryCodes: document.getElementById("quick-codes").value,
       customFields: collectQuickCustomFields(),
+      attachments: quickAttachments.map((a) => ({ ...a })),
       passwordHint: collectQuickPasswordHint(),
     };
     if (quickEditingId) note.id = quickEditingId;
@@ -2055,6 +2217,7 @@ function renderMatch(note, allNotes = []) {
   }
   renderRecoveryCodes(Array.isArray(note.recoveryCodes) ? note.recoveryCodes : []);
   renderMatchCustomFields(Array.isArray(note.customFields) ? note.customFields : []);
+  renderMatchAttachments(Array.isArray(note.attachments) ? note.attachments : []);
 
   const foot = document.getElementById("match-foot");
   if (foot) {
@@ -2107,6 +2270,7 @@ function historyFieldLabel(field) {
     case "passwordHint": return "Password hint";
     case "recoveryCodes": return "Recovery codes";
     case "customFields": return "Custom fields";
+    case "attachments": return "Attachments";
     default: return field;
   }
 }
@@ -2430,6 +2594,16 @@ function renderRecoveryCodes(codes) {
 }
 
 function bindRecoveryReveal() {
+  const attToggle = document.getElementById("match-attachments-toggle");
+  attToggle?.addEventListener("click", () => {
+    const list = document.getElementById("match-attachments-list");
+    if (!list) return;
+    const revealed = list.dataset.revealed !== "true";
+    list.dataset.revealed = revealed ? "true" : "false";
+    const lbl = attToggle.querySelector(".btn-label");
+    if (lbl) lbl.textContent = revealed ? (lbl.dataset.hide || "Hide") : (lbl.dataset.show || "Reveal");
+    attToggle.setAttribute("aria-pressed", revealed ? "true" : "false");
+  });
   const toggle = document.getElementById("match-codes-toggle");
   const count = document.getElementById("match-codes-count");
   if (!toggle) return;

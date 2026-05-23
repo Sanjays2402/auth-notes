@@ -129,10 +129,10 @@ export const HISTORY_VALUE_MAX = 512;
 export const HISTORY_TRACKED_FIELDS = Object.freeze([
   "label", "origin", "authMethod", "email",
   "twofaBackup", "twofaDetail", "notes", "tags",
-  "pinned", "passwordHint", "recoveryCodes", "customFields",
+  "pinned", "passwordHint", "recoveryCodes", "customFields", "attachments",
 ]);
 
-const HISTORY_OPAQUE_FIELDS = new Set(["passwordHint", "recoveryCodes", "customFields"]);
+const HISTORY_OPAQUE_FIELDS = new Set(["passwordHint", "recoveryCodes", "customFields", "attachments"]);
 
 function _clipForHistory(v) {
   if (v == null) return null;
@@ -216,6 +216,68 @@ export function appendNoteHistory(prev, next, { now = Date.now(), max = HISTORY_
   const entry = { ts: Number.isFinite(now) ? now : Date.now(), changes };
   const out = [...existing, entry];
   return out.length > max ? out.slice(out.length - max) : out;
+}
+
+/** Hard limits on per-note attachments (base64-encoded blobs like recovery
+ *  code screenshots). Attachments live inside the encrypted payload (never
+ *  on the envelope) so they ride the same AES-GCM seal as the rest of the
+ *  note. These caps guard payload size; the whole record is still sealed. */
+export const ATTACHMENT_MAX_COUNT = 4;
+export const ATTACHMENT_NAME_MAX = 120;
+export const ATTACHMENT_BYTES_MAX = 256 * 1024; // 256 KiB per attachment
+export const ATTACHMENT_TOTAL_BYTES_MAX = 512 * 1024; // 512 KiB summed
+export const ATTACHMENT_ALLOWED_MIME = Object.freeze([
+  "image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf", "text/plain",
+]);
+
+function _b64Bytes(b64) {
+  if (typeof b64 !== "string" || !b64) return 0;
+  // Strict-ish: count only base64 chars to estimate decoded length.
+  const clean = b64.replace(/[^A-Za-z0-9+/=]/g, "");
+  if (!clean) return 0;
+  let pad = 0;
+  if (clean.endsWith("==")) pad = 2;
+  else if (clean.endsWith("=")) pad = 1;
+  return Math.max(0, Math.floor((clean.length * 3) / 4) - pad);
+}
+
+function _normalizeAttachmentName(input, fallback = "attachment") {
+  const s = String(input == null ? "" : input).replace(/[\r\n\t]+/g, " ").trim();
+  const safe = (s || fallback).replace(/[\\/]+/g, "_");
+  return safe.length > ATTACHMENT_NAME_MAX ? safe.slice(0, ATTACHMENT_NAME_MAX) : safe;
+}
+
+/** Normalize a single attachment entry. Returns null when the entry is
+ *  unusable (missing data, oversized, wrong MIME). */
+export function normalizeAttachment(input, { now = Date.now() } = {}) {
+  if (!input || typeof input !== "object") return null;
+  const mimeRaw = String(input.mimeType || "").trim().toLowerCase();
+  if (!ATTACHMENT_ALLOWED_MIME.includes(mimeRaw)) return null;
+  const data = typeof input.data === "string" ? input.data : "";
+  if (!data) return null;
+  const bytes = Number.isFinite(input.size) && input.size > 0 ? Math.round(input.size) : _b64Bytes(data);
+  if (!bytes || bytes > ATTACHMENT_BYTES_MAX) return null;
+  const name = _normalizeAttachmentName(input.name, mimeRaw.startsWith("image/") ? "screenshot" : "file");
+  const addedAt = Number.isFinite(input.addedAt) ? Math.min(Number(input.addedAt), now) : now;
+  return { name, mimeType: mimeRaw, data, size: bytes, addedAt };
+}
+
+/** Normalize a list of attachment entries. Drops invalid entries, caps by
+ *  count and by total bytes, preserves insertion order. */
+export function normalizeAttachments(input, { now = Date.now() } = {}) {
+  if (input == null || input === "") return [];
+  const raw = Array.isArray(input) ? input : [input];
+  const out = [];
+  let total = 0;
+  for (const entry of raw) {
+    const norm = normalizeAttachment(entry, { now });
+    if (!norm) continue;
+    if (total + norm.size > ATTACHMENT_TOTAL_BYTES_MAX) continue;
+    out.push(norm);
+    total += norm.size;
+    if (out.length >= ATTACHMENT_MAX_COUNT) break;
+  }
+  return out;
 }
 
 /** Hard limits on per-note custom fields (key/value pairs). Custom fields
@@ -462,6 +524,8 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
   if (codes.length) record.recoveryCodes = codes;
   const customFields = normalizeCustomFields(input.customFields);
   if (customFields.length) record.customFields = customFields;
+  const attachments = normalizeAttachments(input.attachments, { now });
+  if (attachments.length) record.attachments = attachments;
   if (Number.isFinite(input.lastUsedAt)) {
     // Don't allow future-dated timestamps; clamp to `now`.
     record.lastUsedAt = Math.min(Number(input.lastUsedAt), now);
@@ -589,6 +653,7 @@ export const ENVELOPE_FORBIDDEN_KEYS = Object.freeze([
   "passwordHint",
   "recoveryCodes",
   "customFields",
+  "attachments",
   "history",
   "createdAt",
   "updatedAt",
