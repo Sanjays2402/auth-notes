@@ -1,0 +1,12 @@
+{
+  "name": "auth-notes",
+  "version": "0.1.0",
+  "description": "Per-site encrypted notes about which auth method/2FA/email you used. Local only, no sync, no cloud.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "echo 'no-op'",
+    "test": "node scripts/smoke.mjs",
+    "build": "echo 'no-op'"
+  }
+}
