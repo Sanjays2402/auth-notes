@@ -150,6 +150,60 @@
       </div>
     </section>
 
+    <section class="glass card" id="card-changepw">
+      <header class="card-head">
+        <h2 class="card-title">Change master password</h2>
+        <p class="card-sub">Rotates the password that unlocks this vault. Every note and audit entry is decrypted with the current key and re-sealed under the new one. The vault must be unlocked.</p>
+      </header>
+      <div class="card-body">
+        <label class="field">
+          <span class="field-label">Current master password</span>
+          <div class="input-wrap">
+            <input id="chpw-current" type="password" autocomplete="current-password" spellcheck="false" placeholder="••••••••">
+            <button type="button" class="input-toggle" data-target="chpw-current" aria-label="Show password">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">New master password</span>
+          <div class="input-wrap">
+            <input id="chpw-new" type="password" autocomplete="new-password" spellcheck="false" placeholder="At least 8 characters">
+            <button type="button" class="input-toggle" data-target="chpw-new" aria-label="Show password">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">Confirm new password</span>
+          <div class="input-wrap">
+            <input id="chpw-confirm" type="password" autocomplete="new-password" spellcheck="false" placeholder="Type it again">
+            <button type="button" class="input-toggle" data-target="chpw-confirm" aria-label="Show password">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </label>
+        <button type="button" id="chpw-run" class="btn-primary">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5" y="10" width="14" height="10" rx="2"/>
+            <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+            <path d="M12 14v2"/>
+          </svg>
+          <span class="btn-label">Rotate master password</span>
+        </button>
+        <p class="hint" id="chpw-status" role="status" hidden></p>
+      </div>
+    </section>
+
     <section class="glass card" id="card-meta">
       <header class="card-head">
         <h2 class="card-title">About</h2>

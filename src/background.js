@@ -333,6 +333,85 @@ handlers["master:rekey"] = async (msg) => {
   };
 };
 
+handlers["master:changePassword"] = async (msg) => {
+  // Rotate the master password. Requires the live (unlocked) key and the
+  // current password. Decrypts every note + audit envelope under the
+  // current key, then re-encrypts them under a key derived from the new
+  // password. Storage is committed in a single set() so a crash mid-rotation
+  // either leaves the vault on the old password (handlers above this point
+  // threw) or on the new one (set() completed).
+  const currentKey = requireUnlocked();
+  const currentPw = String(msg?.currentPassword || "");
+  const newPw = String(msg?.newPassword || "");
+  if (!currentPw) throw new Error("current master password required");
+  if (newPw.length < 8) throw new Error("new password must be at least 8 characters");
+  if (newPw === currentPw) throw new Error("new password must differ from current");
+  const auth = await readAuth();
+  if (!auth) throw new Error("master password not set");
+  // Confirms `currentPw` actually opens the live vault. Throws on mismatch.
+  await verifyPassword(currentPw, auth);
+
+  const settings = await readSettings();
+  const requestedIters = msg?.iterations != null
+    ? sanitizeSettings({ pbkdf2Iterations: msg.iterations }).pbkdf2Iterations
+    : null;
+  const targetIters = requestedIters || settings.pbkdf2Iterations || auth.iterations || PBKDF2_ITERATIONS;
+
+  const envelopes = await readEnvelopes();
+  const auditEnvelopesIn = await readAuditEnvelopes();
+
+  const { record: newAuth, key: newKey } = await buildSetupRecord(newPw, targetIters);
+
+  const newNoteEnvelopes = [];
+  let noteFails = 0;
+  for (const env of envelopes) {
+    try {
+      const note = await decryptNote(currentKey, env);
+      newNoteEnvelopes.push(await encryptNote(newKey, note));
+    } catch (err) {
+      console.warn("[auth-notes] changePassword skipped unreadable note", env?.id, err);
+      noteFails++;
+    }
+  }
+  const newAuditEnvelopes = [];
+  let auditFails = 0;
+  for (const env of auditEnvelopesIn) {
+    try {
+      const event = await decryptAuditEvent(currentKey, env);
+      newAuditEnvelopes.push(await encryptAuditEvent(newKey, event));
+    } catch (err) {
+      console.warn("[auth-notes] changePassword skipped unreadable audit event", env?.id, err);
+      auditFails++;
+    }
+  }
+
+  await chrome.storage.local.set({
+    [STORAGE_KEY_AUTH]: newAuth,
+    [STORAGE_KEY_NOTES]: newNoteEnvelopes,
+    [STORAGE_KEY_AUDIT]: newAuditEnvelopes,
+  });
+  unlockedKey = newKey;
+  if (requestedIters && requestedIters !== settings.pbkdf2Iterations) {
+    await writeSettings({ pbkdf2Iterations: requestedIters });
+  }
+  try {
+    await recordAuditEvent({
+      type: "setup",
+      detail: `master password changed \u2022 ${newNoteEnvelopes.length} notes resealed`
+        + (noteFails || auditFails ? ` (${noteFails + auditFails} unreadable)` : ""),
+    });
+  } catch (err) { console.warn("[auth-notes] audit changePassword failed", err); }
+  bumpActivity();
+  await scheduleAutoLockAlarm();
+  return {
+    changed: true,
+    iterations: targetIters,
+    notes: newNoteEnvelopes.length,
+    auditEvents: newAuditEnvelopes.length,
+    skipped: noteFails + auditFails,
+  };
+};
+
 handlers["settings:set"] = async (msg) => {
   const next = await writeSettings(msg?.settings || {});
   bumpActivity();

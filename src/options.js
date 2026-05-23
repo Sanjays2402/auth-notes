@@ -199,6 +199,42 @@ function bindKdf(settings) {
   });
 }
 
+// --- Change master password ----------------------------------------------
+function bindChangePassword() {
+  const runBtn = $("chpw-run");
+  const status = $("chpw-status");
+  const curEl = $("chpw-current");
+  const newEl = $("chpw-new");
+  const confirmEl = $("chpw-confirm");
+  if (!runBtn || !status || !curEl || !newEl || !confirmEl) return;
+  runBtn.addEventListener("click", async () => {
+    const cur = curEl.value;
+    const next = newEl.value;
+    const confirm = confirmEl.value;
+    if (!cur) { flashErr(status, "Enter the current master password."); return; }
+    if (next.length < 8) { flashErr(status, "New password must be at least 8 characters."); return; }
+    if (next !== confirm) { flashErr(status, "New password and confirmation don't match."); return; }
+    if (next === cur) { flashErr(status, "New password must differ from the current one."); return; }
+    runBtn.disabled = true;
+    status.hidden = false;
+    status.classList.remove("err", "ok");
+    status.textContent = "Re-sealing vault under the new password\u2026";
+    try {
+      const result = await send("master:changePassword", {
+        currentPassword: cur,
+        newPassword: next,
+      });
+      curEl.value = ""; newEl.value = ""; confirmEl.value = "";
+      const extra = result.skipped ? ` (${result.skipped} entries unreadable)` : "";
+      flashSaved(status, `Master password changed \u2022 ${result.notes} notes resealed${extra}.`);
+    } catch (err) {
+      flashErr(status, err.message || "Couldn't change password.");
+    } finally {
+      runBtn.disabled = false;
+    }
+  });
+}
+
 // --- Meta -----------------------------------------------------------------
 function bindMeta(meta, status) {
   $("meta-version").textContent = meta?.version || "—";
@@ -219,6 +255,13 @@ function bindMeta(meta, status) {
       "Master password isn't set yet. Open the popup to create one.";
     $("rekey-run").disabled = true;
   }
+  // Change-password is also gated on an unlocked vault — the handler in the
+  // service worker calls requireUnlocked().
+  const chpwRun = $("chpw-run");
+  if (chpwRun) {
+    if (!status?.hasMaster || status?.locked) chpwRun.disabled = true;
+    else chpwRun.disabled = false;
+  }
 }
 
 // --- Boot -----------------------------------------------------------------
@@ -232,6 +275,7 @@ async function boot() {
     bindTheme(settings.theme || "auto");
     bindIdle(settings.idleTimeoutMin ?? 5);
     bindKdf(settings);
+    bindChangePassword();
     bindMeta(meta, status);
   } catch (err) {
     console.error("[auth-notes] options boot failed", err);

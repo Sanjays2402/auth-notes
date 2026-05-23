@@ -503,6 +503,47 @@ for (const needle of ["opt-theme", "opt-idle", "opt-iters", "rekey-run", "rekey-
 for (const needle of ["master:rekey", "settings:set", "bindKdf", "pbkdf2Iterations"]) {
   if (!optionsJs.includes(needle)) { console.error("options.js missing", needle); process.exit(1); }
 }
+// --- Change master password ---------------------------------------
+for (const needle of ["chpw-current", "chpw-new", "chpw-confirm", "chpw-run"]) {
+  if (!optionsHtml.includes(needle)) { console.error("options.html missing", needle); process.exit(1); }
+}
+for (const needle of ["master:changePassword", "bindChangePassword"]) {
+  if (!optionsJs.includes(needle)) { console.error("options.js missing", needle); process.exit(1); }
+}
+const bgChpw = fs.readFileSync("src/background.js", "utf8");
+if (!bgChpw.includes('handlers["master:changePassword"]')) {
+  console.error("background.js missing master:changePassword handler"); process.exit(1);
+}
+// End-to-end crypto check: rotate the password and prove old key no longer
+// decrypts a re-sealed envelope while the new key does.
+{
+  const pw1 = "old-pw-correct-horse";
+  const pw2 = "new-pw-battery-staple";
+  const r1 = await mod.buildSetupRecord(pw1, 60_000);
+  const note = notes.normalizeNote({
+    origin: "https://example.test",
+    authMethod: "password",
+    email: "rotate@example.test",
+    notes: "rotate me",
+  });
+  const env1 = await notes.encryptNote(r1.key, note);
+  // Verify with new password (rotation) — re-encrypt under new key.
+  const r2 = await mod.buildSetupRecord(pw2, 60_000);
+  const decrypted = await notes.decryptNote(r1.key, env1);
+  const env2 = await notes.encryptNote(r2.key, decrypted);
+  let oldRejected = false;
+  try { await notes.decryptNote(r1.key, env2); }
+  catch { oldRejected = true; }
+  if (!oldRejected) { console.error("rotated envelope should not decrypt with old key"); process.exit(1); }
+  const back = await notes.decryptNote(r2.key, env2);
+  if (back.email !== "rotate@example.test") { console.error("rotated envelope lost data"); process.exit(1); }
+  // The new auth record must verify under the new password and reject the old.
+  await mod.verifyPassword(pw2, r2.record);
+  let oldPwRejected = false;
+  try { await mod.verifyPassword(pw1, r2.record); }
+  catch { oldPwRejected = true; }
+  if (!oldPwRejected) { console.error("old password should not verify against rotated auth"); process.exit(1); }
+}
 const bgSrc2 = fs.readFileSync("src/background.js", "utf8");
 for (const needle of ["master:rekey", "pbkdf2Iterations", "PBKDF2_CHOICES"]) {
   if (!bgSrc2.includes(needle)) { console.error("background.js missing", needle); process.exit(1); }
