@@ -627,6 +627,57 @@ body[data-theme="light"] .hint {
   gap: 8px;
   margin-bottom: 4px;
 }
+
+/* --- Favicon thumbnail ------------------------------------------------ */
+/* A 16px liquid-glass tile that holds the site's local favicon. While the
+   <img> loads (or if it 404s) the parent's data-initial letter shows
+   through, so an entry never renders as a blank square. */
+.favicon {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted, rgba(255,255,255,0.72));
+  letter-spacing: 0;
+  line-height: 1;
+}
+.favicon::before {
+  content: attr(data-initial);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.favicon .favicon-img {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
+  border-radius: 4px;
+  background: transparent;
+}
+body[data-theme="light"] .favicon {
+  background: linear-gradient(135deg, rgba(0,0,0,0.05), rgba(0,0,0,0.02));
+  border-color: rgba(0,0,0,0.10);
+  color: rgba(0,0,0,0.60);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+}
+.match-favicon { width: 22px; height: 22px; border-radius: 7px; }
+.match-favicon .favicon-img { width: 18px; height: 18px; }
+
 .match-label {
   font-size: 13px;
   font-weight: 600;
@@ -959,9 +1010,11 @@ body[data-theme="light"] .search-item:hover { border-color: rgba(0,0,0,0.14); }
 .search-item-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
 }
+.search-item-head .search-item-label { flex: 1; }
+.search-item-head .chip { margin-left: auto; }
 .search-item-label {
   font-size: 13px;
   font-weight: 600;

@@ -759,6 +759,7 @@ function renderSearchResults(payload, query) {
 
     li.innerHTML = `
       <div class="search-item-head">
+        ${faviconHtml(note.origin)}
         <span class="search-item-label">${highlight(label, query)}</span>
         ${auth ? `<span class="chip" data-auth="${escapeHtml(String(note.authMethod || "").toLowerCase())}">${escapeHtml(auth)}</span>` : ""}
       </div>
@@ -1307,6 +1308,45 @@ function displayOrigin(origin) {
   return s.startsWith("www.") ? s.slice(4) : s;
 }
 
+// --- Favicon helpers ------------------------------------------------
+// Uses Chrome's local _favicon API (no network calls). The browser serves a
+// cached favicon or a deterministic placeholder for the given pageUrl.
+function faviconUrl(origin, size = 32) {
+  const host = String(origin || "").trim().toLowerCase();
+  if (!host) return "";
+  const pageUrl = `https://${host}/`;
+  try {
+    const u = new URL(chrome.runtime.getURL("/_favicon/"));
+    u.searchParams.set("pageUrl", pageUrl);
+    u.searchParams.set("size", String(size));
+    return u.toString();
+  } catch {
+    return "";
+  }
+}
+
+function faviconHtml(origin, size = 32) {
+  const url = faviconUrl(origin, size);
+  if (!url) return "";
+  const label = displayOrigin(origin) || "site";
+  const initial = (label[0] || "?").toUpperCase();
+  return `<span class="favicon" aria-hidden="true" data-initial="${escapeHtml(initial)}"><img class="favicon-img" src="${escapeHtml(url)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"/></span>`;
+}
+
+// CSP forbids inline onerror — wire a single capturing listener to hide
+// broken favicon <img>s so the data-initial fallback shows through.
+let __faviconErrorBound = false;
+function bindFaviconErrors() {
+  if (__faviconErrorBound) return;
+  __faviconErrorBound = true;
+  document.addEventListener("error", (ev) => {
+    const t = ev.target;
+    if (t && t.classList && t.classList.contains("favicon-img")) {
+      t.style.visibility = "hidden";
+    }
+  }, true);
+}
+
 async function currentTab() {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -1376,6 +1416,15 @@ function formatRelative(ts) {
 function renderMatch(note) {
   setSiteState("site-match");
   setText("match-label", note.label || displayOrigin(note.origin));
+  const favWrap = document.getElementById("match-favicon");
+  const favImg = document.getElementById("match-favicon-img");
+  if (favWrap && favImg) {
+    const label = displayOrigin(note.origin) || "site";
+    favWrap.dataset.initial = (label[0] || "?").toUpperCase();
+    const url = faviconUrl(note.origin, 64);
+    if (url) { favImg.src = url; favImg.style.visibility = ""; }
+    else { favImg.removeAttribute("src"); favImg.style.visibility = "hidden"; }
+  }
   const authChip = document.getElementById("match-auth");
   if (authChip) {
     const txt = prettyAuth(note.authMethod);
@@ -1557,6 +1606,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   bindStrength();
   bindReveal();
+  bindFaviconErrors();
   bindRecoveryReveal();
   bindSetupForm();
   bindUnlockForm();

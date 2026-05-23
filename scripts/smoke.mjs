@@ -458,6 +458,23 @@ if (noop.changed) { console.error("bulk tags no-op should not change"); process.
 if (!themeBgSrc.includes('handlers["notes:bulkTag"]')) {
   console.error("notes:bulkTag handler missing"); process.exit(1);
 }
+
+// --- Favicon thumbnail wiring ---------------------------------------
+if (!Array.isArray(manifest.permissions) || !manifest.permissions.includes("favicon")) {
+  console.error("manifest missing 'favicon' permission"); process.exit(1);
+}
+const favPopupJs = fs.readFileSync("src/popup.js", "utf8");
+if (!favPopupJs.includes("faviconUrl(") || !favPopupJs.includes("faviconHtml(") || !favPopupJs.includes("_favicon")) {
+  console.error("favicon helpers missing from popup.js"); process.exit(1);
+}
+const favPopupHtml = fs.readFileSync("src/popup.html", "utf8");
+if (!favPopupHtml.includes("match-favicon")) {
+  console.error("match-favicon node missing from popup.html"); process.exit(1);
+}
+const favPopupCss = fs.readFileSync("src/popup.css", "utf8");
+if (!favPopupCss.includes(".favicon") || !favPopupCss.includes(".favicon-img")) {
+  console.error("favicon CSS missing"); process.exit(1);
+}
 const bulkPopupHtml = fs.readFileSync("src/popup.html", "utf8");
 if (!bulkPopupHtml.includes("id=\"bulk-bar\"") || !bulkPopupHtml.includes("id=\"bulk-toggle\"")) {
   console.error("bulk editor UI missing from popup.html"); process.exit(1);

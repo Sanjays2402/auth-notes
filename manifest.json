@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "activeTab",
-    "alarms"
+    "alarms",
+    "favicon"
   ],
   "host_permissions": [],
   "action": {

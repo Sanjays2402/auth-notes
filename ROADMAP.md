@@ -22,7 +22,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Per-note last-used date + auto-sort by recency
 - [x] Bulk tag editor with multi-select
 - [x] Keyboard shortcut to open popup on current tab
-- [ ] Favicon thumbnail next to each site entry
+- [x] Favicon thumbnail next to each site entry
 - [ ] Settings page (options.html) for idle timeout, theme, PBKDF2 iterations
 - [ ] Quick-copy button for email-used field with auto-clear clipboard after 20s
 - [ ] Duplicate-email detector across sites (security hygiene)
