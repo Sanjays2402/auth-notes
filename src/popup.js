@@ -1248,6 +1248,90 @@ function bindQuickPasswordHint() {
   }
 }
 
+// --- Custom fields editor (per-note key/value pairs) ---------------
+// Renders a list of removable rows in the quick-add form, and exposes a
+// collector that the form submit reads. Keys/values are clipped here for
+// snappy UX; the canonical normalization lives in notes.js.
+const CUSTOM_FIELD_KEY_MAX = 64;
+const CUSTOM_FIELD_VALUE_MAX = 2048;
+const CUSTOM_FIELD_MAX_COUNT = 16;
+
+function renderQuickCustomFields(fields) {
+  const list = document.getElementById("quick-fields-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const arr = Array.isArray(fields) ? fields : [];
+  for (const entry of arr) {
+    appendQuickCustomFieldRow(entry?.key || "", entry?.value || "");
+  }
+  updateQuickCustomFieldAddButton();
+}
+
+function appendQuickCustomFieldRow(key = "", value = "") {
+  const list = document.getElementById("quick-fields-list");
+  if (!list) return;
+  if (list.querySelectorAll(".custom-field-row").length >= CUSTOM_FIELD_MAX_COUNT) return;
+  const row = document.createElement("div");
+  row.className = "custom-field-row";
+  row.innerHTML = `
+    <div class="input-wrap custom-field-key">
+      <input class="custom-field-key-input" type="text" spellcheck="false" maxlength="${CUSTOM_FIELD_KEY_MAX}" placeholder="Field name">
+    </div>
+    <div class="input-wrap custom-field-value">
+      <input class="custom-field-value-input" type="text" spellcheck="false" maxlength="${CUSTOM_FIELD_VALUE_MAX}" placeholder="Value">
+    </div>
+    <button type="button" class="icon-btn custom-field-remove" aria-label="Remove field">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 6l12 12"/><path d="M18 6l-12 12"/>
+      </svg>
+    </button>
+  `;
+  row.querySelector(".custom-field-key-input").value = key;
+  row.querySelector(".custom-field-value-input").value = value;
+  row.querySelector(".custom-field-remove")?.addEventListener("click", () => {
+    row.remove();
+    updateQuickCustomFieldAddButton();
+  });
+  list.appendChild(row);
+  updateQuickCustomFieldAddButton();
+}
+
+function updateQuickCustomFieldAddButton() {
+  const btn = document.getElementById("quick-fields-add");
+  const list = document.getElementById("quick-fields-list");
+  if (!btn || !list) return;
+  const count = list.querySelectorAll(".custom-field-row").length;
+  btn.disabled = count >= CUSTOM_FIELD_MAX_COUNT;
+}
+
+function collectQuickCustomFields() {
+  const list = document.getElementById("quick-fields-list");
+  if (!list) return [];
+  const out = [];
+  for (const row of list.querySelectorAll(".custom-field-row")) {
+    const k = row.querySelector(".custom-field-key-input")?.value || "";
+    const v = row.querySelector(".custom-field-value-input")?.value || "";
+    if (!k.trim()) continue;
+    out.push({ key: k, value: v });
+  }
+  return out;
+}
+
+function renderMatchCustomFields(fields) {
+  const row = document.getElementById("match-row-fields");
+  const list = document.getElementById("match-fields-list");
+  if (!row || !list) return;
+  const arr = Array.isArray(fields) ? fields.filter((f) => f && f.key) : [];
+  if (arr.length === 0) { row.hidden = true; list.innerHTML = ""; return; }
+  row.hidden = false;
+  list.innerHTML = arr.map((f) => `
+    <li class="custom-field-readout-row">
+      <span class="custom-field-readout-key">${escapeHtml(f.key)}</span>
+      <span class="custom-field-readout-value">${escapeHtml(f.value || "")}</span>
+    </li>
+  `).join("");
+}
+
 async function openQuickAdd({ note = null, prefillOrigin = "" } = {}) {
   show("view-quick-add");
   setQuickError("");
@@ -1270,6 +1354,7 @@ async function openQuickAdd({ note = null, prefillOrigin = "" } = {}) {
   setVal("quick-tags", Array.isArray(note?.tags) ? note.tags.join(", ") : "");
   setVal("quick-notes", note?.notes || "");
   setVal("quick-codes", Array.isArray(note?.recoveryCodes) ? note.recoveryCodes.join("\n") : "");
+  renderQuickCustomFields(Array.isArray(note?.customFields) ? note.customFields : []);
   // Password-strength hint fields.
   const hint = note?.passwordHint || null;
   setVal("quick-pw-length", hint?.length ? String(hint.length) : "");
@@ -1310,6 +1395,13 @@ async function startQuickAddFromCurrentTab() {
 }
 
 function bindQuickAdd() {
+  const fieldsAdd = document.getElementById("quick-fields-add");
+  fieldsAdd?.addEventListener("click", () => {
+    appendQuickCustomFieldRow("", "");
+    const list = document.getElementById("quick-fields-list");
+    const rows = list?.querySelectorAll(".custom-field-row");
+    rows?.[rows.length - 1]?.querySelector(".custom-field-key-input")?.focus();
+  });
   const back = document.getElementById("quick-back");
   back?.addEventListener("click", async () => {
     const probe = document.getElementById("quick-pw-probe");
@@ -1358,6 +1450,7 @@ function bindQuickAdd() {
       tags: document.getElementById("quick-tags").value,
       notes: document.getElementById("quick-notes").value,
       recoveryCodes: document.getElementById("quick-codes").value,
+      customFields: collectQuickCustomFields(),
       passwordHint: collectQuickPasswordHint(),
     };
     if (quickEditingId) note.id = quickEditingId;
@@ -1562,6 +1655,7 @@ function renderMatch(note) {
   showRow("match-row-pw", "match-pw", formatPasswordHint(note.passwordHint));
   showRow("match-row-notes", "match-notes", note.notes);
   renderRecoveryCodes(Array.isArray(note.recoveryCodes) ? note.recoveryCodes : []);
+  renderMatchCustomFields(Array.isArray(note.customFields) ? note.customFields : []);
 
   const foot = document.getElementById("match-foot");
   if (foot) {

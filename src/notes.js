@@ -94,6 +94,62 @@ export function bucketForPassword(pw) {
 export const TAG_MAX_COUNT = 12;
 export const TAG_MAX_LEN = 32;
 
+/** Hard limits on per-note custom fields (key/value pairs). Custom fields
+ *  live inside the encrypted payload (never on the envelope). These caps
+ *  guard payload size only; AES-GCM still seals the whole record. */
+export const CUSTOM_FIELD_MAX_COUNT = 16;
+export const CUSTOM_FIELD_KEY_MAX = 64;
+export const CUSTOM_FIELD_VALUE_MAX = 2048;
+
+/** Normalize a single custom-field key: trim, collapse internal whitespace,
+ *  clip to {@link CUSTOM_FIELD_KEY_MAX}. Returns empty string for inputs
+ *  that aren't useful as keys. Case is preserved so the user's casing
+ *  ("API Key", "Account #") survives a round-trip. */
+export function normalizeCustomFieldKey(input) {
+  if (input == null) return "";
+  const s = String(input).replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  return s.length > CUSTOM_FIELD_KEY_MAX ? s.slice(0, CUSTOM_FIELD_KEY_MAX) : s;
+}
+
+/** Normalize a custom-fields input → array of { key, value }. Accepts an
+ *  array of {key,value} entries, an array of [key,value] tuples, or a
+ *  plain object. Entries with empty keys are dropped. Duplicate keys are
+ *  resolved last-wins, preserving the order of first occurrence. Values
+ *  are clipped to {@link CUSTOM_FIELD_VALUE_MAX}. */
+export function normalizeCustomFields(input) {
+  if (input == null || input === "") return [];
+  let pairs;
+  if (Array.isArray(input)) {
+    pairs = input.map((entry) => {
+      if (Array.isArray(entry)) return [entry[0], entry[1]];
+      if (entry && typeof entry === "object") return [entry.key, entry.value];
+      return [null, null];
+    });
+  } else if (typeof input === "object") {
+    pairs = Object.entries(input);
+  } else {
+    return [];
+  }
+  const order = [];
+  const byKey = new Map();
+  for (const [rawKey, rawValue] of pairs) {
+    const key = normalizeCustomFieldKey(rawKey);
+    if (!key) continue;
+    let value = rawValue == null ? "" : String(rawValue);
+    if (value.length > CUSTOM_FIELD_VALUE_MAX) value = value.slice(0, CUSTOM_FIELD_VALUE_MAX);
+    if (!byKey.has(key)) order.push(key);
+    byKey.set(key, value);
+    if (order.length > CUSTOM_FIELD_MAX_COUNT) break;
+  }
+  const out = [];
+  for (const key of order) {
+    if (out.length >= CUSTOM_FIELD_MAX_COUNT) break;
+    out.push({ key, value: byKey.get(key) });
+  }
+  return out;
+}
+
 /** Hard limits on the recovery-codes field. Codes live inside the encrypted
  *  payload (never on the envelope). These caps guard payload size only;
  *  AES-GCM still seals the whole record. */
@@ -280,6 +336,8 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
   if (hint) record.passwordHint = hint;
   const codes = normalizeRecoveryCodes(input.recoveryCodes);
   if (codes.length) record.recoveryCodes = codes;
+  const customFields = normalizeCustomFields(input.customFields);
+  if (customFields.length) record.customFields = customFields;
   if (Number.isFinite(input.lastUsedAt)) {
     // Don't allow future-dated timestamps; clamp to `now`.
     record.lastUsedAt = Math.min(Number(input.lastUsedAt), now);
@@ -355,6 +413,7 @@ export const ENVELOPE_FORBIDDEN_KEYS = Object.freeze([
   "tags",
   "passwordHint",
   "recoveryCodes",
+  "customFields",
   "createdAt",
   "updatedAt",
 ]);

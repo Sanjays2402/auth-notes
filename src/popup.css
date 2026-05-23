@@ -1839,3 +1839,67 @@ body[data-theme="light"] .tour-dot[aria-selected="true"] { background: var(--acc
   min-width: 88px;
   justify-content: center;
 }
+
+/* --- Custom fields (per-note key/value pairs) --------------------- */
+.custom-fields-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.custom-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.custom-field-row .input-wrap input {
+  font-size: 12.5px;
+  padding: 6px 10px;
+}
+.custom-field-row .icon-btn {
+  width: 28px;
+  height: 28px;
+  opacity: 0.7;
+  transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.custom-field-row .icon-btn:hover { opacity: 1; }
+.custom-fields-add {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+.custom-fields-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.custom-fields-readout {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.custom-field-readout-row {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.custom-field-readout-key {
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+body[data-theme="light"] .custom-field-readout-key { color: rgba(0, 0, 0, 0.55); }
+.custom-field-readout-value {
+  color: inherit;
+  word-break: break-word;
+  white-space: pre-wrap;
+}

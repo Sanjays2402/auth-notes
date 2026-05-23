@@ -557,4 +557,84 @@ const customKey2 = await mod.verifyPassword("pw-test-iters", customRec);
 void customKey; void customKey2;
 
 
+// --- Custom fields (per-note key/value pairs) ---------------------
+if (typeof notes.normalizeCustomFields !== "function") {
+  console.error("notes.normalizeCustomFields missing"); process.exit(1);
+}
+if (notes.CUSTOM_FIELD_MAX_COUNT !== 16 || notes.CUSTOM_FIELD_KEY_MAX !== 64 || notes.CUSTOM_FIELD_VALUE_MAX !== 2048) {
+  console.error("custom field caps drifted"); process.exit(1);
+}
+if (notes.normalizeCustomFieldKey("  API   Key  ") !== "API Key") {
+  console.error("normalizeCustomFieldKey wrong"); process.exit(1);
+}
+const cfArr = notes.normalizeCustomFields([
+  { key: " Account # ", value: "ABC-123" },
+  ["Support PIN", 4242],
+  { key: "", value: "drop me" },
+  { key: "Account #", value: "override" },
+]);
+if (cfArr.length !== 2 || cfArr[0].key !== "Account #" || cfArr[0].value !== "override" || cfArr[1].key !== "Support PIN" || cfArr[1].value !== "4242") {
+  console.error("normalizeCustomFields array wrong", cfArr); process.exit(1);
+}
+const cfObj = notes.normalizeCustomFields({ alpha: "a", beta: "b" });
+if (cfObj.length !== 2 || cfObj[0].key !== "alpha" || cfObj[1].key !== "beta") {
+  console.error("normalizeCustomFields object wrong", cfObj); process.exit(1);
+}
+if (notes.normalizeCustomFields(null).length !== 0 || notes.normalizeCustomFields("").length !== 0) {
+  console.error("normalizeCustomFields should yield [] for empty"); process.exit(1);
+}
+const _cfLongVal = "x".repeat(notes.CUSTOM_FIELD_VALUE_MAX + 50);
+const _cfClipped = notes.normalizeCustomFields([{ key: "k", value: _cfLongVal }]);
+if (_cfClipped[0].value.length !== notes.CUSTOM_FIELD_VALUE_MAX) {
+  console.error("value clip wrong"); process.exit(1);
+}
+const _cfMany = [];
+for (let i = 0; i < notes.CUSTOM_FIELD_MAX_COUNT + 5; i++) _cfMany.push({ key: `k${i}`, value: `v${i}` });
+if (notes.normalizeCustomFields(_cfMany).length !== notes.CUSTOM_FIELD_MAX_COUNT) {
+  console.error("count cap wrong"); process.exit(1);
+}
+const cfNote = notes.normalizeNote({
+  origin: "https://example.test",
+  authMethod: "password",
+  email: "cf@example.test",
+  customFields: [{ key: "Account #", value: "acct-9001" }, { key: "PIN", value: "4242" }],
+});
+if (!Array.isArray(cfNote.customFields) || cfNote.customFields.length !== 2 || cfNote.customFields[0].key !== "Account #") {
+  console.error("normalizeNote did not carry customFields", cfNote.customFields); process.exit(1);
+}
+const cfEnv = await notes.encryptNote(key, cfNote);
+notes.assertEnvelopeSealed(cfEnv);
+const cfEnvJson = JSON.stringify(cfEnv);
+if (cfEnvJson.includes("acct-9001") || cfEnvJson.includes("Account #") || cfEnvJson.includes("\"PIN\"")) {
+  console.error("custom fields leaked into envelope"); process.exit(1);
+}
+const cfBack = await notes.decryptNote(key, cfEnv);
+if (!Array.isArray(cfBack.customFields) || cfBack.customFields[0].value !== "acct-9001" || cfBack.customFields[1].key !== "PIN") {
+  console.error("customFields round-trip wrong", cfBack.customFields); process.exit(1);
+}
+let cfLeakRejected = false;
+try { notes.assertEnvelopeSealed({ ...env, customFields: [{ key: "x", value: "y" }] }); }
+catch { cfLeakRejected = true; }
+if (!cfLeakRejected) { console.error("customFields should be forbidden on envelope"); process.exit(1); }
+const cfBare = notes.normalizeNote({ origin: "bare.example", authMethod: "passkey" });
+if ("customFields" in cfBare) { console.error("bare note should omit customFields"); process.exit(1); }
+
+const _cfPopupHtml = fs.readFileSync("src/popup.html", "utf8");
+const _cfPopupJs = fs.readFileSync("src/popup.js", "utf8");
+for (const needle of [
+  "quick-fields-fieldset", "quick-fields-list", "quick-fields-add",
+  "match-row-fields", "match-fields-list",
+]) {
+  if (!_cfPopupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+for (const needle of [
+  "renderQuickCustomFields", "collectQuickCustomFields", "renderMatchCustomFields", "appendQuickCustomFieldRow",
+]) {
+  if (!_cfPopupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+const _cfPopupCss = fs.readFileSync("src/popup.css", "utf8");
+if (!_cfPopupCss.includes(".custom-field-row") || !_cfPopupCss.includes(".custom-fields-readout")) {
+  console.error("popup.css missing custom-field styles"); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");
