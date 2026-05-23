@@ -8,11 +8,13 @@ function applyTheme() {
 function show(id) {
   for (const v of document.querySelectorAll(".view")) v.hidden = v.id !== id;
   const lockBtn = document.getElementById("lock-btn");
-  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search";
+  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search" && id !== "view-quick-add";
   const searchBtn = document.getElementById("search-btn");
   if (searchBtn) searchBtn.hidden = id !== "view-vault";
+  const addBtn = document.getElementById("add-btn");
+  if (addBtn) addBtn.hidden = id !== "view-vault";
   const settingsBtn = document.getElementById("settings-btn");
-  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search";
+  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search" || id === "view-quick-add";
 }
 
 async function send(type, payload = {}) {
@@ -618,6 +620,159 @@ function bindSearch() {
   });
 }
 
+// --- Quick-add / edit ------------------------------------------------
+
+let quickEditingId = null;
+let quickPrefilledOrigin = "";
+
+function setQuickError(msg) {
+  const el = document.getElementById("quick-error");
+  if (!el) return;
+  if (!msg) { el.hidden = true; el.textContent = ""; return; }
+  el.textContent = msg;
+  el.hidden = false;
+}
+
+function updateQuick2faVisibility() {
+  const sel = document.getElementById("quick-2fa");
+  const field = document.getElementById("quick-2fa-detail-field");
+  if (!sel || !field) return;
+  field.hidden = !sel.value || sel.value === "none";
+}
+
+async function openQuickAdd({ note = null, prefillOrigin = "" } = {}) {
+  show("view-quick-add");
+  setQuickError("");
+  quickEditingId = note?.id || null;
+  quickPrefilledOrigin = prefillOrigin || note?.origin || "";
+  const title = document.getElementById("quick-title");
+  if (title) title.textContent = note ? "Edit note" : "Add note";
+  const submitLabel = document.querySelector("#quick-submit .btn-label");
+  if (submitLabel) submitLabel.textContent = note ? "Save changes" : "Save note";
+  const del = document.getElementById("quick-delete");
+  if (del) del.hidden = !note;
+
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ""; };
+  setVal("quick-origin", note?.origin || prefillOrigin || "");
+  setVal("quick-label", note?.label && note.label !== note.origin ? note.label : "");
+  setVal("quick-auth", note?.authMethod || "password");
+  setVal("quick-email", note?.email || "");
+  setVal("quick-2fa", note?.twofaBackup || "none");
+  setVal("quick-2fa-detail", note?.twofaDetail || "");
+  setVal("quick-tags", Array.isArray(note?.tags) ? note.tags.join(", ") : "");
+  setVal("quick-notes", note?.notes || "");
+  updateQuick2faVisibility();
+
+  // Focus first field that needs the user — origin if empty, else email.
+  setTimeout(() => {
+    const target = (document.getElementById("quick-origin").value
+      ? document.getElementById("quick-email")
+      : document.getElementById("quick-origin"));
+    target?.focus();
+  }, 30);
+}
+
+async function startQuickAddFromCurrentTab() {
+  let origin = "";
+  try {
+    const tab = await currentTab();
+    if (tab?.url && isSupportedUrl(tab.url)) {
+      origin = new URL(tab.url).hostname.toLowerCase();
+    }
+  } catch { /* leave origin empty */ }
+  // If the current tab already has a note, prefer editing it.
+  if (origin) {
+    try {
+      const matches = await send("notes:list", { origin });
+      if (Array.isArray(matches) && matches.length > 0) {
+        await openQuickAdd({ note: matches[0] });
+        return;
+      }
+    } catch { /* fall through to add */ }
+  }
+  await openQuickAdd({ prefillOrigin: origin });
+}
+
+function bindQuickAdd() {
+  const back = document.getElementById("quick-back");
+  back?.addEventListener("click", async () => {
+    show("view-vault");
+    await refreshCurrentSite();
+  });
+
+  const addBtn = document.getElementById("add-btn");
+  addBtn?.addEventListener("click", () => {
+    addBtn.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.9)" }, { transform: "scale(1)" }],
+      { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    startQuickAddFromCurrentTab();
+  });
+
+  const emptyAdd = document.getElementById("site-empty-add");
+  emptyAdd?.addEventListener("click", () => startQuickAddFromCurrentTab());
+
+  const editBtn = document.getElementById("match-edit");
+  editBtn?.addEventListener("click", () => startQuickAddFromCurrentTab());
+
+  const twofaSel = document.getElementById("quick-2fa");
+  twofaSel?.addEventListener("change", updateQuick2faVisibility);
+
+  const form = document.getElementById("quick-form");
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    setQuickError("");
+    const origin = document.getElementById("quick-origin").value.trim();
+    if (!origin) {
+      setQuickError("Site is required.");
+      document.getElementById("quick-origin")?.focus();
+      return;
+    }
+    const note = {
+      origin,
+      label: document.getElementById("quick-label").value.trim(),
+      authMethod: document.getElementById("quick-auth").value,
+      email: document.getElementById("quick-email").value.trim(),
+      twofaBackup: document.getElementById("quick-2fa").value,
+      twofaDetail: document.getElementById("quick-2fa-detail").value.trim(),
+      tags: document.getElementById("quick-tags").value,
+      notes: document.getElementById("quick-notes").value,
+    };
+    if (quickEditingId) note.id = quickEditingId;
+    const submit = document.getElementById("quick-submit");
+    submit?.classList.add("is-busy");
+    if (submit) submit.disabled = true;
+    try {
+      await send("notes:upsert", { note });
+      quickEditingId = null;
+      show("view-vault");
+      await refreshCurrentSite();
+    } catch (err) {
+      setQuickError(String(err?.message || err));
+    } finally {
+      submit?.classList.remove("is-busy");
+      if (submit) submit.disabled = false;
+    }
+  });
+
+  const del = document.getElementById("quick-delete");
+  del?.addEventListener("click", async () => {
+    if (!quickEditingId) return;
+    if (!confirm("Delete this note? This can't be undone.")) return;
+    del.disabled = true;
+    try {
+      await send("notes:delete", { id: quickEditingId });
+      quickEditingId = null;
+      show("view-vault");
+      await refreshCurrentSite();
+    } catch (err) {
+      setQuickError(String(err?.message || err));
+    } finally {
+      del.disabled = false;
+    }
+  });
+}
+
 async function lockVault() {
   try { await send("master:lock"); }
   catch (err) { console.warn("[auth-notes] lock failed", err); }
@@ -811,6 +966,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindUnlockForm();
   bindSettings();
   bindSearch();
+  bindQuickAdd();
 
   const lockBtn = document.getElementById("lock-btn");
   lockBtn?.addEventListener("click", () => {

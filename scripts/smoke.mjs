@@ -286,4 +286,17 @@ if (final.email !== "me@example.com" || final.id !== decryptedFromBackup.id) {
 }
 void altRecord;
 
+// --- Quick-add UI wiring (static check) -----------------------------
+for (const needle of [
+  "view-quick-add", "quick-form", "quick-origin", "quick-auth", "quick-2fa",
+  "quick-tags", "quick-notes", "quick-submit", "add-btn", "site-empty-add", "match-edit",
+]) {
+  if (!popupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+for (const needle of [
+  "bindQuickAdd", "openQuickAdd", "startQuickAddFromCurrentTab", "notes:upsert", "notes:delete",
+]) {
+  if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+
 console.log("\u2713 smoke ok");

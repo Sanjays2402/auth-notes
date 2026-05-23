@@ -13,7 +13,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Export encrypted backup (.json.enc)
 - [x] Import encrypted backup
 - [x] Tag system (work, personal, banking, etc.)
-- [ ] Quick-add from popup with current URL prefilled
+- [x] Quick-add from popup with current URL prefilled
 - [ ] Audit log of access events (encrypted)
 - [ ] Liquid-glass popup UI
 - [ ] Dark/light theme

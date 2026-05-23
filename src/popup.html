@@ -33,6 +33,11 @@
         <path d="M20 20l-3.5-3.5"/>
       </svg>
     </button>
+    <button id="add-btn" class="icon-btn" title="Add note for current site" aria-label="Add note for current site" hidden>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 5v14"/><path d="M5 12h14"/>
+      </svg>
+    </button>
     <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="3"/>
@@ -179,7 +184,13 @@
             <path d="M36 52v4"/>
           </svg>
           <p class="site-empty-title">No note for this site yet</p>
-          <p class="site-empty-sub">Quick-add lands soon &mdash; until then, notes saved elsewhere will appear here automatically.</p>
+          <p class="site-empty-sub">Capture the auth method, email, and 2FA backup for this site.</p>
+          <button type="button" id="site-empty-add" class="btn-primary btn-compact">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 5v14"/><path d="M5 12h14"/>
+            </svg>
+            <span class="btn-label">Add note for this site</span>
+          </button>
         </div>
 
         <!-- Match found -->
@@ -222,9 +233,119 @@
           </dl>
           <p class="match-foot" id="match-foot"></p>
           <div class="match-tags" id="match-tags" hidden></div>
+          <div class="match-actions">
+            <button type="button" id="match-edit" class="btn-secondary btn-compact">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 4l6 6-11 11H3v-6z"/><path d="M13 5l6 6"/>
+              </svg>
+              <span class="btn-label">Edit</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
+    <!-- Quick-add / edit form -->
+    <section id="view-quick-add" class="view quick-add" hidden>
+      <div class="settings-head">
+        <button type="button" id="quick-back" class="icon-btn" title="Back" aria-label="Back">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+        </button>
+        <h2 class="view-title settings-title" id="quick-title">Add note</h2>
+      </div>
+      <form id="quick-form" class="form glass quick-form" autocomplete="off" novalidate>
+        <label class="field">
+          <span class="field-label">Site</span>
+          <div class="input-wrap">
+            <input id="quick-origin" type="text" required spellcheck="false" placeholder="example.com">
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">Label (optional)</span>
+          <div class="input-wrap">
+            <input id="quick-label" type="text" spellcheck="false" placeholder="Defaults to the site">
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">Auth method</span>
+          <div class="select-wrap">
+            <select id="quick-auth">
+              <option value="password">Password</option>
+              <option value="passkey">Passkey</option>
+              <option value="magic-link">Magic link</option>
+              <option value="google">Google</option>
+              <option value="github">GitHub</option>
+              <option value="apple">Apple</option>
+              <option value="microsoft">Microsoft</option>
+              <option value="sso">SSO</option>
+              <option value="other">Other</option>
+            </select>
+            <svg class="select-caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">Email / identifier</span>
+          <div class="input-wrap">
+            <input id="quick-email" type="text" spellcheck="false" autocomplete="off" placeholder="you@example.com">
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">2FA backup</span>
+          <div class="select-wrap">
+            <select id="quick-2fa">
+              <option value="none">None</option>
+              <option value="authenticator-app">Authenticator app</option>
+              <option value="hardware-key">Hardware key</option>
+              <option value="sms">SMS</option>
+              <option value="email">Email</option>
+              <option value="printed-codes">Printed codes</option>
+              <option value="password-manager">Password manager</option>
+              <option value="other">Other</option>
+            </select>
+            <svg class="select-caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
+        </label>
+        <label class="field" id="quick-2fa-detail-field" hidden>
+          <span class="field-label">2FA detail</span>
+          <div class="input-wrap">
+            <input id="quick-2fa-detail" type="text" spellcheck="false" placeholder="e.g. YubiKey 5C in desk drawer">
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">Tags (optional)</span>
+          <div class="input-wrap">
+            <input id="quick-tags" type="text" spellcheck="false" placeholder="work, dev, banking">
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">Notes</span>
+          <div class="input-wrap textarea-wrap">
+            <textarea id="quick-notes" rows="3" spellcheck="true" placeholder="Anything else worth remembering"></textarea>
+          </div>
+        </label>
+        <p id="quick-error" class="form-error" role="alert" hidden></p>
+        <div class="quick-actions">
+          <button type="button" id="quick-delete" class="btn-danger" hidden>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+            </svg>
+            <span class="btn-label">Delete</span>
+          </button>
+          <button type="submit" id="quick-submit" class="btn-primary">
+            <span class="btn-label">Save note</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>
+            </svg>
+          </button>
+        </div>
+      </form>
+    </section>
+
     <!-- Search across all sites -->
     <section id="view-search" class="view search" hidden>
       <div class="settings-head">
