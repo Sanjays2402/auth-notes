@@ -7,6 +7,8 @@ function applyTheme() {
 
 function show(id) {
   for (const v of document.querySelectorAll(".view")) v.hidden = v.id !== id;
+  const lockBtn = document.getElementById("lock-btn");
+  if (lockBtn) lockBtn.hidden = id !== "view-vault";
 }
 
 async function send(type, payload = {}) {
@@ -91,6 +93,51 @@ function bindSetupForm() {
       submit.classList.remove("is-busy");
     }
   });
+}
+
+function bindUnlockForm() {
+  const form = document.getElementById("unlock-form");
+  const submit = document.getElementById("unlock-submit");
+  if (!form || !submit) return;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById("unlock-error");
+    if (errEl) { errEl.hidden = true; errEl.textContent = ""; }
+    const input = document.getElementById("unlock-pw");
+    const pw = input?.value || "";
+    if (!pw) {
+      if (errEl) { errEl.textContent = "Enter your master password."; errEl.hidden = false; }
+      return;
+    }
+    submit.disabled = true;
+    submit.classList.add("is-busy");
+    try {
+      await send("master:verify", { password: pw });
+      if (input) input.value = "";
+      show("view-vault");
+      await refreshCurrentSite();
+    } catch (err) {
+      const msg = String(err.message || err);
+      const friendly = /verifier|decrypt|bad/i.test(msg) ? "Wrong password. Try again." : msg;
+      if (errEl) { errEl.textContent = friendly; errEl.hidden = false; }
+      form.animate(
+        [{ transform: "translateX(0)" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }],
+        { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+      );
+      if (input) { input.select?.(); input.focus(); }
+    } finally {
+      submit.disabled = false;
+      submit.classList.remove("is-busy");
+    }
+  });
+}
+
+async function lockVault() {
+  try { await send("master:lock"); }
+  catch (err) { console.warn("[auth-notes] lock failed", err); }
+  show("view-lock");
+  const input = document.getElementById("unlock-pw");
+  if (input) { input.value = ""; input.focus(); }
 }
 
 // --- Site detection ---------------------------------------------------
@@ -242,6 +289,12 @@ async function route() {
   try {
     const status = await send("master:status");
     if (!status.hasMaster) { show("view-setup"); return; }
+    if (status.locked) {
+      show("view-lock");
+      const input = document.getElementById("unlock-pw");
+      if (input) setTimeout(() => input.focus(), 30);
+      return;
+    }
     show("view-vault");
     await refreshCurrentSite();
   } catch (err) {
@@ -257,6 +310,16 @@ document.addEventListener("DOMContentLoaded", () => {
   bindStrength();
   bindReveal();
   bindSetupForm();
+  bindUnlockForm();
+
+  const lockBtn = document.getElementById("lock-btn");
+  lockBtn?.addEventListener("click", () => {
+    lockBtn.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.9)" }, { transform: "scale(1)" }],
+      { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    lockVault();
+  });
 
   const btn = document.getElementById("settings-btn");
   btn?.addEventListener("click", () => {

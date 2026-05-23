@@ -165,7 +165,8 @@ body[data-theme="light"] .footer { border-top-color: rgba(0, 0, 0, 0.06); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.setup {
+.setup,
+.lock {
   display: flex;
   flex-direction: column;
   align-items: stretch;

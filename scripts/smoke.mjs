@@ -105,4 +105,14 @@ if (!audit.leaks[0].fields.includes("notes")) {
   console.error("audit leak field missing", audit.leaks[0]); process.exit(1);
 }
 
+// --- Lock/unlock UI wiring (static check) ---
+const popupHtml = fs.readFileSync("src/popup.html", "utf8");
+const popupJs = fs.readFileSync("src/popup.js", "utf8");
+for (const needle of ["view-lock", "unlock-form", "unlock-pw", "lock-btn"]) {
+  if (!popupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+for (const needle of ["master:verify", "master:lock", "bindUnlockForm", "lockVault"]) {
+  if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+
 console.log("\u2713 smoke ok");
