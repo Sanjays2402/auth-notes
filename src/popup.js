@@ -916,6 +916,7 @@ async function openQuickAdd({ note = null, prefillOrigin = "" } = {}) {
   setVal("quick-2fa-detail", note?.twofaDetail || "");
   setVal("quick-tags", Array.isArray(note?.tags) ? note.tags.join(", ") : "");
   setVal("quick-notes", note?.notes || "");
+  setVal("quick-codes", Array.isArray(note?.recoveryCodes) ? note.recoveryCodes.join("\n") : "");
   // Password-strength hint fields.
   const hint = note?.passwordHint || null;
   setVal("quick-pw-length", hint?.length ? String(hint.length) : "");
@@ -1003,6 +1004,7 @@ function bindQuickAdd() {
       twofaDetail: document.getElementById("quick-2fa-detail").value.trim(),
       tags: document.getElementById("quick-tags").value,
       notes: document.getElementById("quick-notes").value,
+      recoveryCodes: document.getElementById("quick-codes").value,
       passwordHint: collectQuickPasswordHint(),
     };
     if (quickEditingId) note.id = quickEditingId;
@@ -1156,6 +1158,7 @@ function renderMatch(note) {
   showRow("match-row-2fa", "match-2fa", twofa);
   showRow("match-row-pw", "match-pw", formatPasswordHint(note.passwordHint));
   showRow("match-row-notes", "match-notes", note.notes);
+  renderRecoveryCodes(Array.isArray(note.recoveryCodes) ? note.recoveryCodes : []);
 
   const foot = document.getElementById("match-foot");
   if (foot) {
@@ -1174,6 +1177,74 @@ function renderMatch(note) {
       tagsEl.innerHTML = tags.map((t) => `<span class="tag-chip" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join("");
     }
   }
+}
+
+function maskCode(code) {
+  const s = String(code || "");
+  if (!s) return "";
+  if (s.length <= 4) return "\u2022".repeat(s.length);
+  const head = s.slice(0, 2);
+  const tail = s.slice(-2);
+  const mid = "\u2022".repeat(Math.max(3, s.length - 4));
+  return `${head}${mid}${tail}`;
+}
+
+let currentRecoveryCodes = [];
+let recoveryRevealed = false;
+
+function paintRecoveryCodes() {
+  const list = document.getElementById("match-codes-list");
+  if (!list) return;
+  list.dataset.revealed = recoveryRevealed ? "true" : "false";
+  list.innerHTML = currentRecoveryCodes.map((code, i) => {
+    const display = recoveryRevealed ? code : maskCode(code);
+    return `<li class="codes-item"><span class="codes-index">${i + 1}</span><span class="codes-value">${escapeHtml(display)}</span></li>`;
+  }).join("");
+}
+
+function renderRecoveryCodes(codes) {
+  const row = document.getElementById("match-row-codes");
+  const count = document.getElementById("match-codes-count");
+  const toggle = document.getElementById("match-codes-toggle");
+  if (!row || !toggle) return;
+  currentRecoveryCodes = Array.isArray(codes) ? codes.filter((c) => typeof c === "string" && c.length > 0) : [];
+  recoveryRevealed = false;
+  if (currentRecoveryCodes.length === 0) {
+    row.hidden = true;
+    return;
+  }
+  row.hidden = false;
+  if (count) {
+    const n = currentRecoveryCodes.length;
+    count.textContent = `${n} code${n === 1 ? "" : "s"} \u2014 masked`;
+  }
+  const label = toggle.querySelector(".btn-label");
+  if (label) label.textContent = label.dataset.show || "Reveal";
+  toggle.setAttribute("aria-expanded", "false");
+  paintRecoveryCodes();
+}
+
+function bindRecoveryReveal() {
+  const toggle = document.getElementById("match-codes-toggle");
+  const count = document.getElementById("match-codes-count");
+  if (!toggle) return;
+  toggle.addEventListener("click", () => {
+    toggle.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }, { transform: "scale(1)" }],
+      { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    recoveryRevealed = !recoveryRevealed;
+    const label = toggle.querySelector(".btn-label");
+    if (label) label.textContent = recoveryRevealed ? (label.dataset.hide || "Hide") : (label.dataset.show || "Reveal");
+    toggle.setAttribute("aria-expanded", recoveryRevealed ? "true" : "false");
+    if (count) {
+      const n = currentRecoveryCodes.length;
+      count.textContent = recoveryRevealed
+        ? `${n} code${n === 1 ? "" : "s"} \u2014 visible`
+        : `${n} code${n === 1 ? "" : "s"} \u2014 masked`;
+    }
+    paintRecoveryCodes();
+  });
 }
 
 async function refreshCurrentSite() {
@@ -1238,6 +1309,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   bindStrength();
   bindReveal();
+  bindRecoveryReveal();
   bindSetupForm();
   bindUnlockForm();
   bindSettings();

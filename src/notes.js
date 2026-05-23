@@ -94,6 +94,48 @@ export function bucketForPassword(pw) {
 export const TAG_MAX_COUNT = 12;
 export const TAG_MAX_LEN = 32;
 
+/** Hard limits on the recovery-codes field. Codes live inside the encrypted
+ *  payload (never on the envelope). These caps guard payload size only;
+ *  AES-GCM still seals the whole record. */
+export const RECOVERY_CODE_MAX_COUNT = 32;
+export const RECOVERY_CODE_MAX_LEN = 64;
+
+/** Normalize a recovery-codes input (array | newline/comma string) → array.
+ *  Trims, drops empties, dedups while preserving order. */
+export function normalizeRecoveryCodes(input) {
+  if (input == null || input === "") return [];
+  let raw;
+  if (Array.isArray(input)) raw = input;
+  else if (typeof input === "string") raw = input.split(/[\r\n,]+/);
+  else return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    if (item == null) continue;
+    const code = String(item).trim();
+    if (!code) continue;
+    const clipped = code.length > RECOVERY_CODE_MAX_LEN ? code.slice(0, RECOVERY_CODE_MAX_LEN) : code;
+    if (seen.has(clipped)) continue;
+    seen.add(clipped);
+    out.push(clipped);
+    if (out.length >= RECOVERY_CODE_MAX_COUNT) break;
+  }
+  return out;
+}
+
+/** Render a code with most characters replaced by a masked dot. Keeps the
+ *  first two and last two glyphs so the user can still tell codes apart at
+ *  a glance without exposing the secret. */
+export function maskRecoveryCode(code) {
+  const s = String(code || "");
+  if (!s) return "";
+  if (s.length <= 4) return "\u2022".repeat(s.length);
+  const head = s.slice(0, 2);
+  const tail = s.slice(-2);
+  const mid = "\u2022".repeat(Math.max(3, s.length - 4));
+  return `${head}${mid}${tail}`;
+}
+
 /** Normalize a single tag: trim, lowercase, collapse whitespace, slug-ish.
  *  Returns empty string for inputs that aren't useful as tags. */
 export function normalizeTag(input) {
@@ -236,6 +278,8 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
   };
   const hint = normalizePasswordHint(input.passwordHint);
   if (hint) record.passwordHint = hint;
+  const codes = normalizeRecoveryCodes(input.recoveryCodes);
+  if (codes.length) record.recoveryCodes = codes;
   return record;
 }
 
@@ -269,6 +313,8 @@ export const ENVELOPE_FORBIDDEN_KEYS = Object.freeze([
   "twofaDetail",
   "notes",
   "tags",
+  "passwordHint",
+  "recoveryCodes",
   "createdAt",
   "updatedAt",
 ]);

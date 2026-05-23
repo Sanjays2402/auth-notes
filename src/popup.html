@@ -232,6 +232,28 @@
               </dt>
               <dd id="match-pw"></dd>
             </div>
+            <div class="match-row match-row-codes" id="match-row-codes" hidden>
+              <dt>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 7h16M4 12h16M4 17h10"/>
+                  <circle cx="19" cy="17" r="2"/>
+                </svg>
+                <span>Recovery codes</span>
+              </dt>
+              <dd>
+                <div class="codes-head">
+                  <span id="match-codes-count" class="codes-count"></span>
+                  <button type="button" id="match-codes-toggle" class="btn-secondary btn-compact" aria-expanded="false" aria-controls="match-codes-list">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <span class="btn-label" data-show="Reveal" data-hide="Hide">Reveal</span>
+                  </button>
+                </div>
+                <ul id="match-codes-list" class="codes-list" data-revealed="false"></ul>
+              </dd>
+            </div>
             <div class="match-row" id="match-row-notes" hidden>
               <dt>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -388,6 +410,14 @@
             <textarea id="quick-notes" rows="3" spellcheck="true" placeholder="Anything else worth remembering"></textarea>
           </div>
         </label>
+        <fieldset class="field field-fieldset" id="quick-codes-fieldset">
+          <legend class="field-label">Recovery codes (optional)</legend>
+          <p class="field-hint">One per line. Sealed in the AES-GCM payload and masked in the popup until you tap reveal.</p>
+          <div class="input-wrap textarea-wrap">
+            <textarea id="quick-codes" rows="4" spellcheck="false" autocomplete="off" placeholder="abcd-1234
+efgh-5678"></textarea>
+          </div>
+        </fieldset>
         <p id="quick-error" class="form-error" role="alert" hidden></p>
         <div class="quick-actions">
           <button type="button" id="quick-delete" class="btn-danger" hidden>
