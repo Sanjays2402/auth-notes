@@ -66,6 +66,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   idleTimeoutMin: DEFAULT_IDLE_MIN,
   theme: DEFAULT_THEME,
   pbkdf2Iterations: PBKDF2_ITERATIONS,
+  onboardingDoneAt: null,
 });
 
 // In-memory only. Never persisted. Cleared on SW termination or lock.
@@ -120,6 +121,14 @@ function sanitizeSettings(patch) {
   if (patch && patch.theme !== undefined) {
     const t = String(patch.theme).toLowerCase();
     out.theme = VALID_THEMES.includes(t) ? t : DEFAULT_THEME;
+  }
+  if (patch && patch.onboardingDoneAt !== undefined) {
+    const v = patch.onboardingDoneAt;
+    if (v === null || v === false) out.onboardingDoneAt = null;
+    else {
+      const n = Math.floor(Number(v));
+      out.onboardingDoneAt = Number.isFinite(n) && n > 0 ? n : Date.now();
+    }
   }
   if (patch && patch.pbkdf2Iterations !== undefined) {
     const n = Math.floor(Number(patch.pbkdf2Iterations));

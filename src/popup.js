@@ -122,6 +122,7 @@ function bindSetupForm() {
       document.getElementById("setup-pw2").value = "";
       show("view-vault");
       await refreshCurrentSite();
+      maybeStartOnboardingTour({ force: true });
     } catch (err) {
       showError(String(err.message || err));
       submit.disabled = false;
@@ -151,6 +152,7 @@ function bindUnlockForm() {
       if (input) input.value = "";
       show("view-vault");
       await refreshCurrentSite();
+      maybeStartOnboardingTour();
     } catch (err) {
       const msg = String(err.message || err);
       const friendly = /verifier|decrypt|bad/i.test(msg) ? "Wrong password. Try again." : msg;
@@ -210,6 +212,9 @@ function bindSettings() {
   bindDuplicates();
   bindThemePicker();
   bindShortcutCard();
+  document.getElementById("tour-replay")?.addEventListener("click", () => {
+    maybeStartOnboardingTour({ force: true });
+  });
 
   const select = document.getElementById("idle-select");
   const summary = document.getElementById("idle-summary");
@@ -1783,6 +1788,175 @@ async function refreshCurrentSite() {
   }
 }
 
+// --- Onboarding tour -------------------------------------------------
+
+const TOUR_STEPS = [
+  {
+    title: "Welcome to Auth Notes",
+    body: "A vault for the boring-but-vital details: which email you used, which 2FA method, where the recovery codes live. Everything stays sealed locally with AES-GCM.",
+    art: `<svg viewBox="0 0 160 110" width="150" height="105" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="32" y="46" width="96" height="54" rx="10" opacity=".85"/>
+      <path d="M52 46V32a28 28 0 0 1 56 0v14" opacity=".85"/>
+      <circle cx="80" cy="72" r="5"/>
+      <path d="M80 77v8"/>
+      <path d="M18 24c4 4 8 4 12 0M130 24c4 4 8 4 12 0" opacity=".4"/>
+      <circle cx="22" cy="60" r="2" opacity=".5"/>
+      <circle cx="140" cy="54" r="2.5" opacity=".5"/>
+    </svg>`,
+  },
+  {
+    title: "Auto-detects the current tab",
+    body: "Open the popup on any site and the matching note surfaces instantly. No searching, no hunting through a list.",
+    art: `<svg viewBox="0 0 160 110" width="150" height="105" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="18" y="22" width="124" height="72" rx="10" opacity=".8"/>
+      <path d="M18 38h124" opacity=".5"/>
+      <circle cx="30" cy="30" r="2"/><circle cx="38" cy="30" r="2"/><circle cx="46" cy="30" r="2"/>
+      <rect x="28" y="50" width="52" height="32" rx="6"/>
+      <path d="M36 60h32M36 68h26M36 76h18" opacity=".5"/>
+      <circle cx="112" cy="66" r="14"/>
+      <path d="M105 66l5 5 9-9"/>
+    </svg>`,
+  },
+  {
+    title: "Quick-add from anywhere",
+    body: "Hit the + button in the header to capture a new site: auth method, email, 2FA backup, tags, and an optional password-strength hint.",
+    art: `<svg viewBox="0 0 160 110" width="150" height="105" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="24" y="22" width="112" height="72" rx="10" opacity=".8"/>
+      <path d="M40 42h80M40 54h64M40 66h72M40 78h48" opacity=".45"/>
+      <circle cx="122" cy="82" r="14"/>
+      <path d="M122 76v12M116 82h12"/>
+    </svg>`,
+  },
+  {
+    title: "Search & bulk-tag everything",
+    body: "The search view filters across labels, emails, and notes. Toggle bulk mode to apply tags to many sites at once.",
+    art: `<svg viewBox="0 0 160 110" width="150" height="105" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="62" cy="54" r="24" opacity=".75"/>
+      <path d="M80 72l20 20" opacity=".75"/>
+      <path d="M50 54h24M62 42v24" opacity=".35"/>
+      <rect x="96" y="22" width="44" height="12" rx="4"/>
+      <rect x="96" y="42" width="34" height="12" rx="4" opacity=".7"/>
+      <rect x="96" y="62" width="28" height="12" rx="4" opacity=".5"/>
+    </svg>`,
+  },
+  {
+    title: "You're in control",
+    body: "Lock manually any time, set an idle auto-lock, export an encrypted backup, or scan for reused emails — all from Settings.",
+    art: `<svg viewBox="0 0 160 110" width="150" height="105" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="80" cy="58" r="22"/>
+      <path d="M80 58l14-6"/>
+      <path d="M80 28v6M80 82v6M50 58h6M104 58h6M58 36l4 4M98 76l4 4M58 80l4-4M98 40l4-4" opacity=".55"/>
+    </svg>`,
+  },
+];
+
+let tourIndex = 0;
+let tourActive = false;
+let tourBound = false;
+let tourFirstFocusable = null;
+
+function renderTourStep() {
+  const step = TOUR_STEPS[tourIndex];
+  if (!step) return;
+  const total = TOUR_STEPS.length;
+  const stepEl = document.getElementById("tour-step");
+  const titleEl = document.getElementById("tour-title");
+  const bodyEl = document.getElementById("tour-body");
+  const artEl = document.getElementById("tour-art");
+  const dotsEl = document.getElementById("tour-dots");
+  const prev = document.getElementById("tour-prev");
+  const next = document.getElementById("tour-next");
+  const nextLabel = document.getElementById("tour-next-label");
+  if (stepEl) stepEl.textContent = `${tourIndex + 1} / ${total}`;
+  if (titleEl) titleEl.textContent = step.title;
+  if (bodyEl) bodyEl.textContent = step.body;
+  if (artEl) artEl.innerHTML = step.art;
+  if (prev) prev.disabled = tourIndex === 0;
+  const isLast = tourIndex === total - 1;
+  if (nextLabel) nextLabel.textContent = isLast ? "Finish" : "Next";
+  if (next) next.dataset.last = isLast ? "true" : "false";
+  if (dotsEl) {
+    if (dotsEl.children.length !== total) {
+      dotsEl.innerHTML = "";
+      for (let i = 0; i < total; i++) {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = "tour-dot";
+        dot.setAttribute("role", "tab");
+        dot.setAttribute("aria-label", `Step ${i + 1}`);
+        dot.dataset.index = String(i);
+        dot.addEventListener("click", () => {
+          tourIndex = i;
+          renderTourStep();
+        });
+        dotsEl.appendChild(dot);
+      }
+    }
+    Array.from(dotsEl.children).forEach((d, i) => {
+      d.setAttribute("aria-selected", i === tourIndex ? "true" : "false");
+    });
+  }
+}
+
+function bindTourOnce() {
+  if (tourBound) return;
+  tourBound = true;
+  document.getElementById("tour-next")?.addEventListener("click", () => {
+    if (tourIndex >= TOUR_STEPS.length - 1) { finishOnboardingTour(true); return; }
+    tourIndex += 1;
+    renderTourStep();
+  });
+  document.getElementById("tour-prev")?.addEventListener("click", () => {
+    if (tourIndex > 0) { tourIndex -= 1; renderTourStep(); }
+  });
+  document.getElementById("tour-skip")?.addEventListener("click", () => finishOnboardingTour(true));
+  document.addEventListener("keydown", (e) => {
+    if (!tourActive) return;
+    if (e.key === "Escape") { e.preventDefault(); finishOnboardingTour(true); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); document.getElementById("tour-next")?.click(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); document.getElementById("tour-prev")?.click(); }
+  });
+}
+
+function openTour() {
+  const root = document.getElementById("tour-root");
+  if (!root) return;
+  bindTourOnce();
+  tourActive = true;
+  tourIndex = 0;
+  renderTourStep();
+  root.hidden = false;
+  tourFirstFocusable = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  setTimeout(() => document.getElementById("tour-next")?.focus(), 60);
+}
+
+async function finishOnboardingTour(persist) {
+  const root = document.getElementById("tour-root");
+  if (root) root.hidden = true;
+  tourActive = false;
+  if (persist) {
+    try { await send("settings:set", { settings: { onboardingDoneAt: Date.now() } }); }
+    catch (err) { console.warn("[auth-notes] persist onboarding flag failed", err); }
+  }
+  if (tourFirstFocusable && document.body.contains(tourFirstFocusable)) {
+    try { tourFirstFocusable.focus(); } catch { /* noop */ }
+  }
+  tourFirstFocusable = null;
+}
+
+async function maybeStartOnboardingTour(opts) {
+  const force = !!(opts && opts.force);
+  try {
+    if (!force) {
+      const s = await send("settings:get");
+      if (s && s.onboardingDoneAt) return;
+    }
+    openTour();
+  } catch (err) {
+    console.warn("[auth-notes] onboarding check failed", err);
+  }
+}
+
 async function route() {
   try {
     const status = await send("master:status");
@@ -1795,6 +1969,7 @@ async function route() {
     }
     show("view-vault");
     await refreshCurrentSite();
+    maybeStartOnboardingTour();
   } catch (err) {
     console.warn("[auth-notes] status failed", err);
     show("view-setup");

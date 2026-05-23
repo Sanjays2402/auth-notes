@@ -732,10 +732,27 @@ efgh-5678"></textarea>
           </div>
         </div>
       </div>
+      <div class="glass settings-card">
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <span class="settings-row-title">Onboarding tour</span>
+            <span class="settings-row-sub">Replay the welcome walkthrough.</span>
+          </div>
+        </div>
+        <div class="settings-control">
+          <div class="import-row">
+            <button type="button" id="tour-replay" class="btn-secondary">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 12a8 8 0 1 1 2.3 5.6"/>
+                <path d="M3 8v5h5"/>
+              </svg>
+              <span class="btn-label">Replay tour</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
     </section>
-
-    <!-- Duplicate-email scanner -->
     <section id="view-duplicates" class="view duplicates" hidden>
       <div class="settings-head">
         <button type="button" id="dupes-back" class="icon-btn" title="Back" aria-label="Back">
@@ -790,6 +807,43 @@ efgh-5678"></textarea>
     </section>
 
   </main>
+  <!-- Onboarding tour (first-unlock walkthrough) -->
+  <div id="tour-root" class="tour-root" hidden role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body">
+    <div class="tour-backdrop" aria-hidden="true"></div>
+    <article id="tour-card" class="tour-card glass">
+      <header class="tour-head">
+        <span class="tour-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2l2.4 5 5.6.8-4 4 .9 5.6L12 14.8 7.1 17.4 8 11.8 4 7.8 9.6 7z"/>
+          </svg>
+        </span>
+        <span class="tour-step" id="tour-step" aria-live="polite">1 / 5</span>
+        <button type="button" id="tour-skip" class="icon-btn tour-skip" title="Skip tour" aria-label="Skip tour">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 6l12 12"/><path d="M18 6l-12 12"/>
+          </svg>
+        </button>
+      </header>
+      <div class="tour-art" id="tour-art" aria-hidden="true"></div>
+      <h2 class="view-title tour-title" id="tour-title"></h2>
+      <p class="view-sub tour-body" id="tour-body"></p>
+      <div class="tour-dots" id="tour-dots" role="tablist" aria-label="Tour progress"></div>
+      <div class="tour-actions">
+        <button type="button" id="tour-prev" class="btn-secondary btn-compact" disabled>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+          <span class="btn-label">Back</span>
+        </button>
+        <button type="button" id="tour-next" class="btn-primary btn-compact">
+          <span class="btn-label" id="tour-next-label">Next</span>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>
+          </svg>
+        </button>
+      </div>
+    </article>
+  </div>
   <footer class="footer"><span class="version">v0.1.0</span></footer>
   <script type="module" src="popup.js"></script>
 </body>

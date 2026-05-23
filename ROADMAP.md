@@ -26,4 +26,4 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Settings page (options.html) for idle timeout, theme, PBKDF2 iterations
 - [x] Quick-copy button for email-used field with auto-clear clipboard after 20s
 - [x] Duplicate-email detector across sites (security hygiene)
-- [ ] Onboarding tour for first unlock
+- [x] Onboarding tour for first unlock
