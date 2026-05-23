@@ -488,4 +488,32 @@ if (!bulkPopupCss.includes(".bulk-bar") || !bulkPopupCss.includes(".is-bulk")) {
   console.error("bulk editor CSS missing"); process.exit(1);
 }
 
+// --- Options page (settings) ---------------------------------------
+for (const p of ["src/options.html", "src/options.css", "src/options.js"]) {
+  if (!fs.existsSync(p)) { console.error("missing options file:", p); process.exit(1); }
+}
+if (!manifest.options_ui || manifest.options_ui.page !== "src/options.html") {
+  console.error("manifest missing options_ui.page"); process.exit(1);
+}
+const optionsHtml = fs.readFileSync("src/options.html", "utf8");
+const optionsJs = fs.readFileSync("src/options.js", "utf8");
+for (const needle of ["opt-theme", "opt-idle", "opt-iters", "rekey-run", "rekey-pw"]) {
+  if (!optionsHtml.includes(needle)) { console.error("options.html missing", needle); process.exit(1); }
+}
+for (const needle of ["master:rekey", "settings:set", "bindKdf", "pbkdf2Iterations"]) {
+  if (!optionsJs.includes(needle)) { console.error("options.js missing", needle); process.exit(1); }
+}
+const bgSrc2 = fs.readFileSync("src/background.js", "utf8");
+for (const needle of ["master:rekey", "pbkdf2Iterations", "PBKDF2_CHOICES"]) {
+  if (!bgSrc2.includes(needle)) { console.error("background.js missing", needle); process.exit(1); }
+}
+// buildSetupRecord must accept an iterations override.
+const { record: customRec, key: customKey } = await mod.buildSetupRecord("pw-test-iters", 60_000);
+if (customRec.iterations !== 60_000) {
+  console.error("buildSetupRecord did not honor iterations override", customRec.iterations); process.exit(1);
+}
+const customKey2 = await mod.verifyPassword("pw-test-iters", customRec);
+void customKey; void customKey2;
+
+
 console.log("\u2713 smoke ok");

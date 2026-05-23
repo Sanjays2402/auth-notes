@@ -91,15 +91,16 @@ export async function decryptString(key, payload) {
  * Stores the salt + iteration count + an encrypted canary verifier.
  * The derived key is returned separately and should be held in memory only.
  */
-export async function buildSetupRecord(password) {
+export async function buildSetupRecord(password, iterations = PBKDF2_ITERATIONS) {
+  const iters = Math.max(50_000, Math.floor(Number(iterations) || PBKDF2_ITERATIONS));
   const salt = randomBytes(SALT_BYTES);
-  const key = await deriveKey(password, salt);
+  const key = await deriveKey(password, salt, iters);
   const verifier = await encryptString(key, VERIFIER_PLAINTEXT);
   return {
     record: {
       schema: CRYPTO_SCHEMA,
       kdf: "PBKDF2-SHA256",
-      iterations: PBKDF2_ITERATIONS,
+      iterations: iters,
       salt: bytesToB64(salt),
       verifier,
       createdAt: Date.now(),

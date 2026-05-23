@@ -1,7 +1,18 @@
 // Auth Notes — MV3 service worker
 // Scope: lifecycle, message routing, storage bootstrap, master-password setup.
 
-import { buildSetupRecord, verifyPassword } from "./crypto.js";
+import {
+  PBKDF2_ITERATIONS,
+  buildSetupRecord,
+  bytesToB64,
+  deriveKey,
+  encryptString,
+  randomBytes,
+  CRYPTO_SCHEMA,
+  SALT_BYTES,
+  VERIFIER_PLAINTEXT,
+  verifyPassword,
+} from "./crypto.js";
 import {
   AUDIT_MAX,
   AUTH_METHODS,
@@ -45,7 +56,16 @@ const DEFAULT_IDLE_MIN = 5;
 const MAX_IDLE_MIN = 1440; // 24h
 const VALID_THEMES = Object.freeze(["auto", "dark", "light"]);
 const DEFAULT_THEME = "auto";
-const DEFAULT_SETTINGS = Object.freeze({ idleTimeoutMin: DEFAULT_IDLE_MIN, theme: DEFAULT_THEME });
+// PBKDF2 iteration choices surfaced in the options page. The default matches
+// the crypto module's baseline so existing vaults need no migration.
+const PBKDF2_CHOICES = Object.freeze([100_000, 250_000, 500_000, 1_000_000]);
+const MIN_PBKDF2 = 50_000;
+const MAX_PBKDF2 = 4_000_000;
+const DEFAULT_SETTINGS = Object.freeze({
+  idleTimeoutMin: DEFAULT_IDLE_MIN,
+  theme: DEFAULT_THEME,
+  pbkdf2Iterations: PBKDF2_ITERATIONS,
+});
 
 // In-memory only. Never persisted. Cleared on SW termination or lock.
 let unlockedKey = null;
@@ -99,6 +119,14 @@ function sanitizeSettings(patch) {
   if (patch && patch.theme !== undefined) {
     const t = String(patch.theme).toLowerCase();
     out.theme = VALID_THEMES.includes(t) ? t : DEFAULT_THEME;
+  }
+  if (patch && patch.pbkdf2Iterations !== undefined) {
+    const n = Math.floor(Number(patch.pbkdf2Iterations));
+    if (Number.isFinite(n) && n >= MIN_PBKDF2) {
+      out.pbkdf2Iterations = Math.min(MAX_PBKDF2, n);
+    } else {
+      out.pbkdf2Iterations = PBKDF2_ITERATIONS;
+    }
   }
   return out;
 }
@@ -189,7 +217,8 @@ handlers["master:setup"] = async (msg) => {
   if (typeof password !== "string" || password.length < 8) {
     throw new Error("password must be at least 8 characters");
   }
-  const { record, key } = await buildSetupRecord(password);
+  const settings = await readSettings();
+  const { record, key } = await buildSetupRecord(password, settings.pbkdf2Iterations);
   await chrome.storage.local.set({ [STORAGE_KEY_AUTH]: record });
   await writeMeta({ hasMaster: true, locked: false });
   unlockedKey = key;
@@ -216,7 +245,83 @@ handlers["master:lock"] = async () => {
   return { ok: true };
 };
 
-handlers["settings:get"] = async () => readSettings();
+handlers["settings:get"] = async () => ({
+  ...(await readSettings()),
+  pbkdf2Choices: PBKDF2_CHOICES,
+  pbkdf2Default: PBKDF2_ITERATIONS,
+});
+
+handlers["master:rekey"] = async (msg) => {
+  // Re-derive the master key under a new iteration count and re-seal every
+  // note + audit envelope. Requires the live password so we can decrypt all
+  // existing ciphertext before rotating. The vault must already be unlocked.
+  const currentKey = requireUnlocked();
+  const password = String(msg?.password || "");
+  if (!password) throw new Error("current master password required");
+  const auth = await readAuth();
+  if (!auth) throw new Error("master password not set");
+  // Confirm the password actually opens the live vault. Throws on mismatch.
+  await verifyPassword(password, auth);
+  const targetIters = sanitizeSettings({ pbkdf2Iterations: msg?.iterations }).pbkdf2Iterations
+    || (await readSettings()).pbkdf2Iterations;
+  if (targetIters === auth.iterations) {
+    return { rekeyed: false, reason: "already-at-target", iterations: targetIters };
+  }
+
+  // Decrypt note envelopes with the live key, then re-encrypt with the new key.
+  const envelopes = await readEnvelopes();
+  const auditEnvelopesIn = await readAuditEnvelopes();
+
+  const { record: newAuth, key: newKey } = await buildSetupRecord(password, targetIters);
+
+  const newNoteEnvelopes = [];
+  let noteFails = 0;
+  for (const env of envelopes) {
+    try {
+      const note = await decryptNote(currentKey, env);
+      newNoteEnvelopes.push(await encryptNote(newKey, note));
+    } catch (err) {
+      console.warn("[auth-notes] rekey skipped unreadable note", env?.id, err);
+      noteFails++;
+    }
+  }
+  const newAuditEnvelopes = [];
+  let auditFails = 0;
+  for (const env of auditEnvelopesIn) {
+    try {
+      const event = await decryptAuditEvent(currentKey, env);
+      newAuditEnvelopes.push(await encryptAuditEvent(newKey, event));
+    } catch (err) {
+      console.warn("[auth-notes] rekey skipped unreadable audit event", env?.id, err);
+      auditFails++;
+    }
+  }
+
+  // Commit atomically-ish: write auth + notes + audit together, then swap the
+  // in-memory key. If any step throws above we have not touched storage yet.
+  await chrome.storage.local.set({
+    [STORAGE_KEY_AUTH]: newAuth,
+    [STORAGE_KEY_NOTES]: newNoteEnvelopes,
+    [STORAGE_KEY_AUDIT]: newAuditEnvelopes,
+  });
+  unlockedKey = newKey;
+  await writeSettings({ pbkdf2Iterations: targetIters });
+  try {
+    await recordAuditEvent({
+      type: "setup",
+      detail: `rekey \u2192 ${targetIters.toLocaleString()} iters\u00b7${newNoteEnvelopes.length} notes` + (noteFails || auditFails ? ` (${noteFails + auditFails} unreadable)` : ""),
+    });
+  } catch (err) { console.warn("[auth-notes] audit rekey failed", err); }
+  bumpActivity();
+  await scheduleAutoLockAlarm();
+  return {
+    rekeyed: true,
+    iterations: targetIters,
+    notes: newNoteEnvelopes.length,
+    auditEvents: newAuditEnvelopes.length,
+    skipped: noteFails + auditFails,
+  };
+};
 
 handlers["settings:set"] = async (msg) => {
   const next = await writeSettings(msg?.settings || {});

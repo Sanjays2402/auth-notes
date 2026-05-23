@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auth Notes — Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body data-theme="dark">
+  <div class="ambient" aria-hidden="true">
+    <span class="blob blob-a"></span>
+    <span class="blob blob-b"></span>
+    <span class="blob blob-c"></span>
+  </div>
+  <header class="topbar glass">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="5" y="10" width="14" height="10" rx="2"/>
+          <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+        </svg>
+      </span>
+      <span class="title">Auth Notes</span>
+    </div>
+    <span class="topbar-sub">Settings</span>
+  </header>
+
+  <main class="page">
+    <section class="hero">
+      <h1 class="hero-title">Vault preferences</h1>
+      <p class="hero-sub">Tune appearance, auto-lock, and the master key derivation cost. Changes apply immediately.</p>
+      <p id="lock-banner" class="banner banner-warn" hidden>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="5" y="11" width="14" height="9" rx="2"/>
+          <path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+        </svg>
+        <span>Vault is locked. Unlock it from the popup to edit security-sensitive settings.</span>
+      </p>
+    </section>
+
+    <section class="glass card" id="card-theme">
+      <header class="card-head">
+        <h2 class="card-title">Appearance</h2>
+        <p class="card-sub">Match the system, or pin a theme.</p>
+      </header>
+      <div class="card-body">
+        <div class="segmented" id="opt-theme" role="radiogroup" aria-label="Theme">
+          <button type="button" class="seg" role="radio" aria-checked="false" data-theme="auto">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="12" rx="2"/>
+              <path d="M8 21h8"/><path d="M12 17v4"/>
+            </svg>
+            <span>System</span>
+          </button>
+          <button type="button" class="seg" role="radio" aria-checked="false" data-theme="light">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4l1.4-1.4M17 7l1.4-1.4"/>
+            </svg>
+            <span>Light</span>
+          </button>
+          <button type="button" class="seg" role="radio" aria-checked="false" data-theme="dark">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.5 6.5 0 0 0 9.8 9.8z"/>
+            </svg>
+            <span>Dark</span>
+          </button>
+          <span class="seg-pill" aria-hidden="true"></span>
+        </div>
+        <p class="hint" id="theme-saved" hidden>Saved.</p>
+      </div>
+    </section>
+
+    <section class="glass card" id="card-idle">
+      <header class="card-head">
+        <h2 class="card-title">Auto-lock after idle</h2>
+        <p class="card-sub" id="idle-summary">Locks the vault when there's no activity.</p>
+      </header>
+      <div class="card-body">
+        <label class="field">
+          <span class="field-label">Idle timeout</span>
+          <div class="select-wrap">
+            <select id="opt-idle">
+              <option value="0">Off</option>
+              <option value="1">1 minute</option>
+              <option value="5">5 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="60">1 hour</option>
+              <option value="240">4 hours</option>
+            </select>
+            <svg class="select-caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
+        </label>
+        <p class="hint" id="idle-saved" hidden>Saved.</p>
+      </div>
+    </section>
+
+    <section class="glass card" id="card-kdf">
+      <header class="card-head">
+        <h2 class="card-title">Master key derivation</h2>
+        <p class="card-sub">PBKDF2-SHA256 iterations. Higher is slower to unlock and slower to brute-force. Changing this re-encrypts every note under the new derived key.</p>
+      </header>
+      <div class="card-body">
+        <div class="kdf-row">
+          <div class="kdf-stat">
+            <span class="kdf-stat-label">Current</span>
+            <span class="kdf-stat-value" id="kdf-current">—</span>
+          </div>
+          <div class="kdf-stat">
+            <span class="kdf-stat-label">Recommended</span>
+            <span class="kdf-stat-value" id="kdf-default">—</span>
+          </div>
+        </div>
+        <label class="field">
+          <span class="field-label">Target iterations</span>
+          <div class="select-wrap">
+            <select id="opt-iters"></select>
+            <svg class="select-caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
+        </label>
+        <details class="kdf-rekey" id="rekey-panel">
+          <summary>Re-derive key now &raquo;</summary>
+          <p class="hint">Enter the master password to re-seal every note and audit entry under the new iteration count. The vault must be unlocked.</p>
+          <label class="field">
+            <span class="field-label">Current master password</span>
+            <div class="input-wrap">
+              <input id="rekey-pw" type="password" autocomplete="off" spellcheck="false" placeholder="••••••••">
+              <button type="button" class="input-toggle" data-target="rekey-pw" aria-label="Show password">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+          </label>
+          <button type="button" id="rekey-run" class="btn-primary">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 0 1-15.5 6.3"/><path d="M3 12a9 9 0 0 1 15.5-6.3"/>
+              <path d="M21 4v5h-5"/><path d="M3 20v-5h5"/>
+            </svg>
+            <span class="btn-label">Re-derive &amp; re-seal vault</span>
+          </button>
+          <p class="hint" id="rekey-status" role="status" hidden></p>
+        </details>
+      </div>
+    </section>
+
+    <section class="glass card" id="card-meta">
+      <header class="card-head">
+        <h2 class="card-title">About</h2>
+        <p class="card-sub">Diagnostic info and storage scope.</p>
+      </header>
+      <div class="card-body">
+        <dl class="meta">
+          <div class="meta-row"><dt>Version</dt><dd id="meta-version">—</dd></div>
+          <div class="meta-row"><dt>Vault created</dt><dd id="meta-created">—</dd></div>
+          <div class="meta-row"><dt>Status</dt><dd id="meta-status">—</dd></div>
+          <div class="meta-row"><dt>Storage</dt><dd>chrome.storage.local · local only · no sync</dd></div>
+        </dl>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>
