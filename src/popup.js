@@ -1441,6 +1441,7 @@ function renderMatch(note) {
     else { row.hidden = true; }
   };
   showRow("match-row-email", "match-email", note.email);
+  updateEmailCopyButton(note.email || "");
   const twofa = note.twofaBackup && note.twofaBackup !== "none"
     ? (note.twofaDetail ? `${prettyBackup(note.twofaBackup)} — ${note.twofaDetail}` : prettyBackup(note.twofaBackup))
     : "";
@@ -1485,6 +1486,105 @@ function maskCode(code) {
 
 let currentRecoveryCodes = [];
 let recoveryRevealed = false;
+
+// --- Quick-copy: email-used field --------------------------------
+// Clipboard auto-clear: when the user copies the email, schedule a wipe in
+// CLIPBOARD_CLEAR_MS milliseconds. If the same value is still on the
+// clipboard we overwrite it with a single space (Chromium refuses an empty
+// writeText) so the secret doesn't linger. If the user has copied something
+// else in the meantime, we leave it alone.
+const CLIPBOARD_CLEAR_MS = 20_000;
+let clipboardClearTimer = null;
+let clipboardClearValue = "";
+let copyButtonResetTimer = null;
+
+function updateEmailCopyButton(value) {
+  const btn = document.getElementById("match-email-copy");
+  if (!btn) return;
+  const v = String(value || "").trim();
+  btn.hidden = !v;
+  btn.dataset.email = v;
+  if (!v) {
+    btn.dataset.state = "idle";
+    const label = document.getElementById("match-email-copy-label");
+    if (label) label.textContent = "Copy";
+  }
+}
+
+function setCopyButtonState(state, labelText) {
+  const btn = document.getElementById("match-email-copy");
+  if (!btn) return;
+  btn.dataset.state = state;
+  const label = document.getElementById("match-email-copy-label");
+  if (label) label.textContent = labelText;
+  clearTimeout(copyButtonResetTimer);
+  if (state !== "idle") {
+    copyButtonResetTimer = setTimeout(() => {
+      btn.dataset.state = "idle";
+      if (label) label.textContent = "Copy";
+    }, CLIPBOARD_CLEAR_MS);
+  }
+}
+
+async function clearClipboardIfStale() {
+  clipboardClearTimer = null;
+  const stash = clipboardClearValue;
+  clipboardClearValue = "";
+  if (!stash) return;
+  try {
+    let current = "";
+    try { current = await navigator.clipboard.readText(); }
+    catch { current = stash; /* assume still there; safer to clear */ }
+    if (current === stash) {
+      // writeText("") is rejected on some platforms; a single space safely
+      // overwrites the secret without leaving a discoverable empty entry.
+      await navigator.clipboard.writeText(" ");
+    }
+  } catch (err) {
+    console.warn("[auth-notes] clipboard clear failed", err);
+  }
+  const btn = document.getElementById("match-email-copy");
+  if (btn && btn.dataset.state !== "idle") {
+    btn.dataset.state = "idle";
+    const label = document.getElementById("match-email-copy-label");
+    if (label) label.textContent = "Copy";
+  }
+}
+
+function scheduleClipboardClear(value) {
+  clearTimeout(clipboardClearTimer);
+  clipboardClearValue = value;
+  clipboardClearTimer = setTimeout(clearClipboardIfStale, CLIPBOARD_CLEAR_MS);
+}
+
+async function copyEmailWithAutoClear() {
+  const btn = document.getElementById("match-email-copy");
+  if (!btn) return;
+  const email = String(btn.dataset.email || "").trim();
+  if (!email) return;
+  btn.animate(
+    [{ transform: "scale(1)" }, { transform: "scale(0.94)" }, { transform: "scale(1)" }],
+    { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+  );
+  try {
+    await navigator.clipboard.writeText(email);
+  } catch (err) {
+    console.warn("[auth-notes] copy failed", err);
+    setCopyButtonState("error", "Failed");
+    return;
+  }
+  scheduleClipboardClear(email);
+  setCopyButtonState("copied", "Copied — clears 20s");
+}
+
+function bindEmailCopy() {
+  const btn = document.getElementById("match-email-copy");
+  if (!btn) return;
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    copyEmailWithAutoClear();
+  });
+}
 
 function paintRecoveryCodes() {
   const list = document.getElementById("match-codes-list");
@@ -1608,6 +1708,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindReveal();
   bindFaviconErrors();
   bindRecoveryReveal();
+  bindEmailCopy();
   bindSetupForm();
   bindUnlockForm();
   bindSettings();

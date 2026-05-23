@@ -741,6 +741,68 @@ body[data-theme="light"] .match-row {
   line-height: 1.5;
 }
 
+/* Match value rows that pair text + an inline action button. */
+.match-row dd.match-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+.match-value-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* Liquid-glass quick-copy chip. Phosphor-style icons, animates between */
+/* idle → copied → reset states. Accent ring on focus. */
+.copy-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: -0.01em;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              background 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+body[data-theme="light"] .copy-btn {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.copy-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+body[data-theme="light"] .copy-btn:hover {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.14);
+}
+.copy-btn:active { transform: translateY(0) scale(0.97); }
+.copy-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }
+.copy-btn svg { flex: 0 0 auto; opacity: 0.85; }
+.copy-btn .copy-icon-done { display: none; }
+.copy-btn[data-state="copied"] {
+  color: var(--accent);
+  border-color: color-mix(in oklch, var(--accent) 40%, transparent);
+  background: color-mix(in oklch, var(--accent) 12%, transparent);
+}
+.copy-btn[data-state="copied"] .copy-icon-default { display: none; }
+.copy-btn[data-state="copied"] .copy-icon-done { display: inline-block; }
+.copy-btn[data-state="error"] { color: #ff8a8a; border-color: rgba(255, 138, 138, 0.4); }
+
 .match-foot {
   margin: 10px 0 0;
   font-size: 11px;

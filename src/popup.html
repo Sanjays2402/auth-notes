@@ -210,7 +210,19 @@
                 </svg>
                 <span>Email</span>
               </dt>
-              <dd id="match-email"></dd>
+              <dd class="match-value">
+                <span id="match-email" class="match-value-text"></span>
+                <button type="button" id="match-email-copy" class="copy-btn" data-state="idle" aria-label="Copy email — clipboard auto-clears in 20 seconds" title="Copy email — auto-clears in 20s" hidden>
+                  <svg class="copy-icon-default" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="8" y="8" width="12" height="12" rx="2.5"/>
+                    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>
+                  </svg>
+                  <svg class="copy-icon-done" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 12.5l4.5 4.5L19 7"/>
+                  </svg>
+                  <span class="copy-btn-label" id="match-email-copy-label" aria-live="polite">Copy</span>
+                </button>
+              </dd>
             </div>
             <div class="match-row" id="match-row-2fa" hidden>
               <dt>
