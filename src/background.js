@@ -41,7 +41,9 @@ const STORAGE_KEY_AUDIT = "an:audit";
 const ALARM_AUTO_LOCK = "an:auto-lock-check";
 const DEFAULT_IDLE_MIN = 5;
 const MAX_IDLE_MIN = 1440; // 24h
-const DEFAULT_SETTINGS = Object.freeze({ idleTimeoutMin: DEFAULT_IDLE_MIN });
+const VALID_THEMES = Object.freeze(["auto", "dark", "light"]);
+const DEFAULT_THEME = "auto";
+const DEFAULT_SETTINGS = Object.freeze({ idleTimeoutMin: DEFAULT_IDLE_MIN, theme: DEFAULT_THEME });
 
 // In-memory only. Never persisted. Cleared on SW termination or lock.
 let unlockedKey = null;
@@ -91,6 +93,10 @@ function sanitizeSettings(patch) {
     const n = Number(patch.idleTimeoutMin);
     if (!Number.isFinite(n) || n < 0) out.idleTimeoutMin = 0;
     else out.idleTimeoutMin = Math.min(MAX_IDLE_MIN, Math.floor(n));
+  }
+  if (patch && patch.theme !== undefined) {
+    const t = String(patch.theme).toLowerCase();
+    out.theme = VALID_THEMES.includes(t) ? t : DEFAULT_THEME;
   }
   return out;
 }

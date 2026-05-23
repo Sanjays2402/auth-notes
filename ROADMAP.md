@@ -16,4 +16,4 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Quick-add from popup with current URL prefilled
 - [x] Audit log of access events (encrypted)
 - [x] Liquid-glass popup UI
-- [ ] Dark/light theme
+- [x] Dark/light theme

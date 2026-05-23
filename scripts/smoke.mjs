@@ -363,4 +363,20 @@ if (trimmed.length !== 5 || trimmed[0].ts !== 7 || trimmed[4].ts !== 11) {
   console.error("trimAuditLog wrong", trimmed.map((e) => e.ts)); process.exit(1);
 }
 
+// --- Theme settings: UI presence ---
+const themePopupHtml = fs.readFileSync("src/popup.html", "utf8");
+if (!themePopupHtml.includes("theme-summary") || !themePopupHtml.includes("data-theme=\"light\"") || !themePopupHtml.includes("data-theme=\"dark\"") || !themePopupHtml.includes("data-theme=\"auto\"")) {
+  console.error("theme picker missing from popup.html"); process.exit(1);
+}
+const themePopupCss = fs.readFileSync("src/popup.css", "utf8");
+if (!themePopupCss.includes(".segmented")) { console.error("segmented control CSS missing"); process.exit(1); }
+const themePopupJs = fs.readFileSync("src/popup.js", "utf8");
+if (!themePopupJs.includes("setThemePref") || !themePopupJs.includes("resolveTheme")) {
+  console.error("theme handling missing from popup.js"); process.exit(1);
+}
+const themeBgSrc = fs.readFileSync("src/background.js", "utf8");
+if (!themeBgSrc.includes("VALID_THEMES") || !themeBgSrc.includes("theme: DEFAULT_THEME")) {
+  console.error("theme handling missing from background.js"); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");

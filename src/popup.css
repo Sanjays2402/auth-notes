@@ -1163,3 +1163,61 @@ body[data-theme="light"] .audit-item:hover { border-color: rgba(0,0,0,0.14); }
   color: var(--muted);
   white-space: nowrap;
 }
+
+/* --- Segmented control (theme picker) ----------------------------- */
+.segmented {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  isolation: isolate;
+}
+body[data-theme="light"] .segmented {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.segmented .seg {
+  position: relative;
+  z-index: 1;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  padding: 7px 8px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.segmented .seg:hover { opacity: 0.95; }
+.segmented .seg:focus-visible {
+  outline: 2px solid rgba(123, 158, 255, 0.6);
+  outline-offset: 1px;
+}
+.segmented .seg.is-active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+              0 1px 2px rgba(0, 0, 0, 0.24);
+}
+body[data-theme="light"] .segmented .seg.is-active {
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8),
+              0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.segmented .seg.is-active svg { color: var(--accent, #7b9eff); }
+.segmented .seg-pill { display: none; }

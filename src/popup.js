@@ -1,8 +1,37 @@
 // Auth Notes — popup entry point
 
+const THEME_MEDIA = window.matchMedia("(prefers-color-scheme: light)");
+let themePref = "auto"; // "auto" | "dark" | "light"
+
+function resolveTheme(pref) {
+  if (pref === "light" || pref === "dark") return pref;
+  return THEME_MEDIA.matches ? "light" : "dark";
+}
+
 function applyTheme() {
-  const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
-  document.body.dataset.theme = prefersLight ? "light" : "dark";
+  document.body.dataset.theme = resolveTheme(themePref);
+}
+
+function setThemePref(pref) {
+  themePref = pref === "light" || pref === "dark" ? pref : "auto";
+  applyTheme();
+  syncThemeControls();
+}
+
+function syncThemeControls() {
+  const buttons = document.querySelectorAll(".segmented .seg");
+  if (!buttons.length) return;
+  buttons.forEach((b) => {
+    const active = b.dataset.theme === themePref;
+    b.classList.toggle("is-active", active);
+    b.setAttribute("aria-checked", active ? "true" : "false");
+  });
+  const summary = document.getElementById("theme-summary");
+  if (summary) {
+    if (themePref === "auto") summary.textContent = `Following system (${resolveTheme("auto")}).`;
+    else if (themePref === "light") summary.textContent = "Pinned to the light theme.";
+    else summary.textContent = "Pinned to the dark theme.";
+  }
 }
 
 function show(id) {
@@ -161,6 +190,8 @@ async function openSettings() {
       select.value = String(match);
     }
     if (summary) summary.textContent = idleSummaryText(min);
+    if (settings?.theme) setThemePref(settings.theme);
+    syncThemeControls();
   } catch (err) {
     console.warn("[auth-notes] settings:get failed", err);
   }
@@ -176,6 +207,7 @@ function bindSettings() {
   bindExport();
   bindImport();
   bindAudit();
+  bindThemePicker();
 
   const select = document.getElementById("idle-select");
   const summary = document.getElementById("idle-summary");
@@ -197,6 +229,32 @@ function bindSettings() {
     } catch (err) {
       console.warn("[auth-notes] settings:set failed", err);
     }
+  });
+}
+
+function bindThemePicker() {
+  const buttons = document.querySelectorAll(".segmented .seg");
+  const saved = document.getElementById("theme-saved");
+  buttons.forEach((b) => {
+    b.addEventListener("click", async () => {
+      const next = b.dataset.theme;
+      if (!next || next === themePref) return;
+      setThemePref(next);
+      try {
+        await send("settings:set", { settings: { theme: next } });
+        if (saved) {
+          saved.hidden = false;
+          saved.animate(
+            [{ opacity: 0, transform: "translateY(2px)" }, { opacity: 1, transform: "translateY(0)" }],
+            { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+          );
+          clearTimeout(bindThemePicker._t);
+          bindThemePicker._t = setTimeout(() => { saved.hidden = true; }, 1400);
+        }
+      } catch (err) {
+        console.warn("[auth-notes] theme persist failed", err);
+      }
+    });
   });
 }
 
@@ -1085,7 +1143,13 @@ async function route() {
 
 document.addEventListener("DOMContentLoaded", () => {
   applyTheme();
-  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", applyTheme);
+  THEME_MEDIA.addEventListener("change", () => {
+    if (themePref === "auto") { applyTheme(); syncThemeControls(); }
+  });
+  // Load persisted pref ASAP (best effort).
+  send("settings:get").then((s) => {
+    if (s?.theme) setThemePref(s.theme);
+  }).catch(() => { /* not unlocked or background asleep; keep auto */ });
 
   bindStrength();
   bindReveal();
