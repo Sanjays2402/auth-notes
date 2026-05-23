@@ -8,9 +8,11 @@ function applyTheme() {
 function show(id) {
   for (const v of document.querySelectorAll(".view")) v.hidden = v.id !== id;
   const lockBtn = document.getElementById("lock-btn");
-  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings";
+  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search";
+  const searchBtn = document.getElementById("search-btn");
+  if (searchBtn) searchBtn.hidden = id !== "view-vault";
   const settingsBtn = document.getElementById("settings-btn");
-  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock";
+  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search";
 }
 
 async function send(type, payload = {}) {
@@ -189,6 +191,186 @@ function bindSettings() {
     } catch (err) {
       console.warn("[auth-notes] settings:set failed", err);
     }
+  });
+}
+
+// --- Search ----------------------------------------------------------
+
+const SEARCH_DEBOUNCE_MS = 140;
+const SEARCH_LIMIT = 50;
+let searchTimer = null;
+let searchSeq = 0;
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>\"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+function highlight(text, query) {
+  const t = String(text ?? "");
+  if (!t) return "";
+  const tokens = String(query || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return escapeHtml(t);
+  const lower = t.toLowerCase();
+  const ranges = [];
+  for (const tok of tokens) {
+    let from = 0;
+    while (from < lower.length) {
+      const idx = lower.indexOf(tok, from);
+      if (idx === -1) break;
+      ranges.push([idx, idx + tok.length]);
+      from = idx + tok.length;
+    }
+  }
+  if (ranges.length === 0) return escapeHtml(t);
+  ranges.sort((a, b) => a[0] - b[0]);
+  const merged = [ranges[0].slice()];
+  for (let i = 1; i < ranges.length; i++) {
+    const last = merged[merged.length - 1];
+    const [a, b] = ranges[i];
+    if (a <= last[1]) last[1] = Math.max(last[1], b);
+    else merged.push([a, b]);
+  }
+  let out = "";
+  let cursor = 0;
+  for (const [a, b] of merged) {
+    out += escapeHtml(t.slice(cursor, a));
+    out += `<mark>${escapeHtml(t.slice(a, b))}</mark>`;
+    cursor = b;
+  }
+  out += escapeHtml(t.slice(cursor));
+  return out;
+}
+
+function renderSearchResults(payload, query) {
+  const list = document.getElementById("search-results");
+  const empty = document.getElementById("search-empty");
+  const summary = document.getElementById("search-summary");
+  const emptyTitle = document.getElementById("search-empty-title");
+  const emptySub = document.getElementById("search-empty-sub");
+  if (!list || !empty || !summary) return;
+
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  list.innerHTML = "";
+
+  if (results.length === 0) {
+    empty.hidden = false;
+    summary.textContent = "";
+    if (query) {
+      if (emptyTitle) emptyTitle.textContent = "No matches";
+      if (emptySub) emptySub.textContent = `Nothing in your vault matches \u201c${query}\u201d.`;
+    } else {
+      if (emptyTitle) emptyTitle.textContent = "No notes yet";
+      if (emptySub) emptySub.textContent = "Add notes from a site, then search across everything here.";
+    }
+    return;
+  }
+  empty.hidden = true;
+  const shown = results.length;
+  const total = Number.isFinite(payload?.total) ? payload.total : shown;
+  summary.textContent = query
+    ? `${total} match${total === 1 ? "" : "es"}${total > shown ? ` \u2022 showing ${shown}` : ""}`
+    : `${total} note${total === 1 ? "" : "s"} in vault`;
+
+  const frag = document.createDocumentFragment();
+  for (const { note, hits } of results) {
+    const li = document.createElement("li");
+    li.className = "search-item glass";
+    li.setAttribute("role", "option");
+    li.dataset.id = note.id || "";
+    const label = note.label || displayOrigin(note.origin);
+    const origin = displayOrigin(note.origin);
+    const auth = prettyAuth(note.authMethod);
+    const twofa = note.twofaBackup && note.twofaBackup !== "none"
+      ? (note.twofaDetail
+        ? `${prettyBackup(note.twofaBackup)} \u2014 ${note.twofaDetail}`
+        : prettyBackup(note.twofaBackup))
+      : "";
+    const updated = formatRelative(note.updatedAt);
+    const hitSet = new Set(Array.isArray(hits) ? hits : []);
+    const showNotes = hitSet.has("notes") && note.notes;
+
+    li.innerHTML = `
+      <div class="search-item-head">
+        <span class="search-item-label">${highlight(label, query)}</span>
+        ${auth ? `<span class="chip" data-auth="${escapeHtml(String(note.authMethod || "").toLowerCase())}">${escapeHtml(auth)}</span>` : ""}
+      </div>
+      <div class="search-item-origin">${highlight(origin, query)}</div>
+      ${note.email ? `<div class="search-item-line"><span class="search-item-key">Email</span><span>${highlight(note.email, query)}</span></div>` : ""}
+      ${twofa ? `<div class="search-item-line"><span class="search-item-key">2FA</span><span>${highlight(twofa, query)}</span></div>` : ""}
+      ${showNotes ? `<div class="search-item-line search-item-notes"><span class="search-item-key">Note</span><span>${highlight(note.notes, query)}</span></div>` : ""}
+      ${updated ? `<div class="search-item-foot">Updated ${escapeHtml(updated)}</div>` : ""}
+    `;
+    frag.appendChild(li);
+  }
+  list.appendChild(frag);
+}
+
+async function runSearch(query) {
+  const seq = ++searchSeq;
+  try {
+    const payload = await send("notes:search", { query, limit: SEARCH_LIMIT });
+    if (seq !== searchSeq) return; // stale
+    renderSearchResults(payload, query);
+  } catch (err) {
+    if (seq !== searchSeq) return;
+    console.warn("[auth-notes] search failed", err);
+    renderSearchResults({ results: [], total: 0 }, query);
+  }
+}
+
+function openSearch() {
+  show("view-search");
+  const input = document.getElementById("search-input");
+  const clearBtn = document.getElementById("search-clear");
+  if (input) {
+    if (clearBtn) clearBtn.hidden = !input.value;
+    setTimeout(() => input.focus(), 30);
+  }
+  runSearch(input?.value || "");
+}
+
+function bindSearch() {
+  const btn = document.getElementById("search-btn");
+  btn?.addEventListener("click", () => {
+    btn.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.92)" }, { transform: "scale(1)" }],
+      { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    openSearch();
+  });
+  const back = document.getElementById("search-back");
+  back?.addEventListener("click", async () => {
+    show("view-vault");
+    await refreshCurrentSite();
+  });
+  const input = document.getElementById("search-input");
+  const clearBtn = document.getElementById("search-clear");
+  input?.addEventListener("input", () => {
+    if (clearBtn) clearBtn.hidden = !input.value;
+    clearTimeout(searchTimer);
+    const q = input.value;
+    searchTimer = setTimeout(() => runSearch(q), SEARCH_DEBOUNCE_MS);
+  });
+  input?.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (input.value) {
+        input.value = "";
+        if (clearBtn) clearBtn.hidden = true;
+        runSearch("");
+      } else {
+        show("view-vault");
+        refreshCurrentSite();
+      }
+    }
+  });
+  clearBtn?.addEventListener("click", () => {
+    if (!input) return;
+    input.value = "";
+    clearBtn.hidden = true;
+    input.focus();
+    runSearch("");
   });
 }
 
@@ -372,6 +554,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindSetupForm();
   bindUnlockForm();
   bindSettings();
+  bindSearch();
 
   const lockBtn = document.getElementById("lock-btn");
   lockBtn?.addEventListener("click", () => {

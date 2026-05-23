@@ -27,6 +27,12 @@
         <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
       </svg>
     </button>
+    <button id="search-btn" class="icon-btn" title="Search notes" aria-label="Search notes" hidden>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/>
+        <path d="M20 20l-3.5-3.5"/>
+      </svg>
+    </button>
     <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="3"/>
@@ -218,6 +224,43 @@
         </div>
       </div>
     </section>
+    <!-- Search across all sites -->
+    <section id="view-search" class="view search" hidden>
+      <div class="settings-head">
+        <button type="button" id="search-back" class="icon-btn" title="Back" aria-label="Back">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+        </button>
+        <h2 class="view-title settings-title">Search</h2>
+      </div>
+      <div class="search-input-wrap glass">
+        <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"/>
+          <path d="M20 20l-3.5-3.5"/>
+        </svg>
+        <input id="search-input" type="search" autocomplete="off" spellcheck="false" placeholder="Search sites, emails, notes…" aria-label="Search notes">
+        <button type="button" id="search-clear" class="input-toggle" aria-label="Clear search" hidden>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 6l12 12"/><path d="M18 6l-12 12"/>
+          </svg>
+        </button>
+      </div>
+      <p id="search-summary" class="search-summary" aria-live="polite"></p>
+      <ul id="search-results" class="search-results" role="listbox" aria-label="Search results"></ul>
+      <div id="search-empty" class="search-empty" hidden>
+        <svg viewBox="0 0 140 100" width="140" height="100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="58" cy="50" r="26" opacity=".7"/>
+          <path d="M78 70l18 18" opacity=".7"/>
+          <path d="M46 50h24M58 38v24" opacity=".35"/>
+          <circle cx="108" cy="22" r="2" opacity=".5"/>
+          <circle cx="22" cy="82" r="2.5" opacity=".5"/>
+        </svg>
+        <p class="site-empty-title" id="search-empty-title">No notes yet</p>
+        <p class="site-empty-sub" id="search-empty-sub">Add notes from a site, then search across everything here.</p>
+      </div>
+    </section>
+
     <!-- Settings -->
     <section id="view-settings" class="view settings" hidden>
       <div class="settings-head">

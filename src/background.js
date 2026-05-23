@@ -231,6 +231,61 @@ handlers["notes:schema"] = async () => ({
   twofaBackups: TWOFA_BACKUPS,
 });
 
+handlers["notes:search"] = async (msg) => {
+  const key = requireUnlocked();
+  const q = String(msg?.query || "").trim().toLowerCase();
+  const limit = Math.min(Math.max(Number(msg?.limit) || 50, 1), 200);
+  const envelopes = await readEnvelopes();
+  const decrypted = [];
+  for (const env of envelopes) {
+    try { decrypted.push(await decryptNote(key, env)); }
+    catch (err) { console.warn("[auth-notes] skip undecryptable note", env.id, err); }
+  }
+  if (!q) {
+    const sorted = sortNotes(decrypted);
+    return { query: q, total: decrypted.length, results: sorted.slice(0, limit).map((n) => ({ note: n, score: 0, hits: [] })) };
+  }
+  // Tokenize once; AND-match across all tokens (each token must appear in at
+  // least one searchable field). Weighted by which field matched.
+  const tokens = q.split(/\s+/).filter(Boolean);
+  const FIELD_WEIGHTS = [
+    ["label", 5],
+    ["origin", 4],
+    ["email", 3],
+    ["authMethod", 2],
+    ["twofaBackup", 2],
+    ["twofaDetail", 2],
+    ["notes", 1],
+  ];
+  const scored = [];
+  for (const note of decrypted) {
+    const fields = Object.fromEntries(
+      FIELD_WEIGHTS.map(([k]) => [k, String(note[k] || "").toLowerCase()])
+    );
+    let totalScore = 0;
+    const hits = new Set();
+    let allTokensMatched = true;
+    for (const tok of tokens) {
+      let tokenMatched = false;
+      for (const [field, weight] of FIELD_WEIGHTS) {
+        const idx = fields[field].indexOf(tok);
+        if (idx === -1) continue;
+        tokenMatched = true;
+        hits.add(field);
+        // Prefix-of-field gets a small bonus.
+        totalScore += weight + (idx === 0 ? 1 : 0);
+      }
+      if (!tokenMatched) { allTokensMatched = false; break; }
+    }
+    if (allTokensMatched) scored.push({ note, score: totalScore, hits: [...hits] });
+  }
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return (b.note.updatedAt || 0) - (a.note.updatedAt || 0);
+  });
+  return { query: q, total: scored.length, results: scored.slice(0, limit) };
+};
+
 handlers["notes:list"] = async (msg) => {
   const key = requireUnlocked();
   const filter = msg?.origin ? originOf(msg.origin) : null;
