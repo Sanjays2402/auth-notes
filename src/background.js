@@ -18,9 +18,17 @@ const VERSION = "0.1.0";
 const STORAGE_KEY_META = "an:meta";
 const STORAGE_KEY_AUTH = "an:auth";
 const STORAGE_KEY_NOTES = "an:notes";
+const STORAGE_KEY_SETTINGS = "an:settings";
+
+// Auto-lock
+const ALARM_AUTO_LOCK = "an:auto-lock-check";
+const DEFAULT_IDLE_MIN = 5;
+const MAX_IDLE_MIN = 1440; // 24h
+const DEFAULT_SETTINGS = Object.freeze({ idleTimeoutMin: DEFAULT_IDLE_MIN });
 
 // In-memory only. Never persisted. Cleared on SW termination or lock.
 let unlockedKey = null;
+let lastActivityAt = Date.now();
 
 /** Bootstrap default metadata on first install. */
 async function ensureMeta() {
@@ -53,6 +61,67 @@ async function readAuth() {
   const got = await chrome.storage.local.get(STORAGE_KEY_AUTH);
   return got[STORAGE_KEY_AUTH] || null;
 }
+
+async function readSettings() {
+  const got = await chrome.storage.local.get(STORAGE_KEY_SETTINGS);
+  const raw = got[STORAGE_KEY_SETTINGS] || {};
+  return { ...DEFAULT_SETTINGS, ...raw };
+}
+
+function sanitizeSettings(patch) {
+  const out = {};
+  if (patch && patch.idleTimeoutMin !== undefined) {
+    const n = Number(patch.idleTimeoutMin);
+    if (!Number.isFinite(n) || n < 0) out.idleTimeoutMin = 0;
+    else out.idleTimeoutMin = Math.min(MAX_IDLE_MIN, Math.floor(n));
+  }
+  return out;
+}
+
+async function writeSettings(patch) {
+  const cur = await readSettings();
+  const next = { ...cur, ...sanitizeSettings(patch) };
+  await chrome.storage.local.set({ [STORAGE_KEY_SETTINGS]: next });
+  return next;
+}
+
+// --- Auto-lock idle timer -----------------------------------------------
+
+function bumpActivity() {
+  lastActivityAt = Date.now();
+}
+
+async function clearAutoLockAlarm() {
+  try { await chrome.alarms?.clear?.(ALARM_AUTO_LOCK); } catch { /* noop */ }
+}
+
+async function scheduleAutoLockAlarm() {
+  await clearAutoLockAlarm();
+  if (!unlockedKey) return;
+  const { idleTimeoutMin } = await readSettings();
+  if (!idleTimeoutMin || idleTimeoutMin <= 0) return; // disabled
+  // chrome.alarms minimum granularity is 1 min; we re-check elapsed each tick.
+  chrome.alarms?.create?.(ALARM_AUTO_LOCK, { periodInMinutes: 1, delayInMinutes: 1 });
+}
+
+async function performAutoLock(reason = "idle") {
+  if (!unlockedKey) return;
+  unlockedKey = null;
+  await clearAutoLockAlarm();
+  await writeMeta({ locked: true });
+  console.log(`[auth-notes] auto-locked (${reason})`);
+}
+
+chrome.alarms?.onAlarm.addListener(async (alarm) => {
+  if (!alarm || alarm.name !== ALARM_AUTO_LOCK) return;
+  if (!unlockedKey) { await clearAutoLockAlarm(); return; }
+  const { idleTimeoutMin } = await readSettings();
+  if (!idleTimeoutMin || idleTimeoutMin <= 0) { await clearAutoLockAlarm(); return; }
+  const elapsedMs = Date.now() - lastActivityAt;
+  if (elapsedMs >= idleTimeoutMin * 60_000) {
+    await performAutoLock(`${idleTimeoutMin}m idle`);
+  }
+});
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   try {
@@ -95,6 +164,8 @@ handlers["master:setup"] = async (msg) => {
   await chrome.storage.local.set({ [STORAGE_KEY_AUTH]: record });
   await writeMeta({ hasMaster: true, locked: false });
   unlockedKey = key;
+  bumpActivity();
+  await scheduleAutoLockAlarm();
   return { ok: true };
 };
 
@@ -104,13 +175,30 @@ handlers["master:verify"] = async (msg) => {
   const key = await verifyPassword(String(msg?.password || ""), auth);
   unlockedKey = key;
   await writeMeta({ locked: false });
+  bumpActivity();
+  await scheduleAutoLockAlarm();
   return { ok: true };
 };
 
 handlers["master:lock"] = async () => {
   unlockedKey = null;
   await writeMeta({ locked: true });
+  await clearAutoLockAlarm();
   return { ok: true };
+};
+
+handlers["settings:get"] = async () => readSettings();
+
+handlers["settings:set"] = async (msg) => {
+  const next = await writeSettings(msg?.settings || {});
+  bumpActivity();
+  await scheduleAutoLockAlarm();
+  return next;
+};
+
+handlers["activity:ping"] = async () => {
+  bumpActivity();
+  return { lastActivityAt };
 };
 
 // --- Notes CRUD --------------------------------------------------------
@@ -202,6 +290,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: false, error: `unknown message type: ${type}` });
     return false;
   }
+  // Any inbound message from the popup counts as user activity once unlocked,
+  // resetting the idle auto-lock countdown.
+  if (unlockedKey && type !== "ping") bumpActivity();
   Promise.resolve()
     .then(() => fn(msg))
     .then((data) => sendResponse({ ok: true, data }))

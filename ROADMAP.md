@@ -8,7 +8,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Auto-detect current site, surface matching note in popup
 - [x] Encrypt all notes at rest in chrome.storage.local
 - [x] Lock/unlock with master password
-- [ ] Auto-lock after N minutes idle
+- [x] Auto-lock after N minutes idle
 - [ ] Search across all sites
 - [ ] Export encrypted backup (.json.enc)
 - [ ] Import encrypted backup

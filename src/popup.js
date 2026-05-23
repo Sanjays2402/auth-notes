@@ -8,7 +8,9 @@ function applyTheme() {
 function show(id) {
   for (const v of document.querySelectorAll(".view")) v.hidden = v.id !== id;
   const lockBtn = document.getElementById("lock-btn");
-  if (lockBtn) lockBtn.hidden = id !== "view-vault";
+  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings";
+  const settingsBtn = document.getElementById("settings-btn");
+  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock";
 }
 
 async function send(type, payload = {}) {
@@ -128,6 +130,64 @@ function bindUnlockForm() {
     } finally {
       submit.disabled = false;
       submit.classList.remove("is-busy");
+    }
+  });
+}
+
+function idleSummaryText(min) {
+  if (!min || min <= 0) return "Auto-lock is off. The vault stays unlocked until you lock it manually.";
+  if (min === 1) return "Locks the vault after 1 minute of inactivity.";
+  if (min < 60) return `Locks the vault after ${min} minutes of inactivity.`;
+  const h = min / 60;
+  return `Locks the vault after ${h === 1 ? "1 hour" : `${h} hours`} of inactivity.`;
+}
+
+async function openSettings() {
+  show("view-settings");
+  const select = document.getElementById("idle-select");
+  const summary = document.getElementById("idle-summary");
+  const saved = document.getElementById("settings-saved");
+  if (saved) saved.hidden = true;
+  try {
+    const settings = await send("settings:get");
+    const min = Number(settings?.idleTimeoutMin ?? 5);
+    if (select) {
+      const opts = Array.from(select.options).map((o) => Number(o.value));
+      const match = opts.includes(min) ? min : 5;
+      select.value = String(match);
+    }
+    if (summary) summary.textContent = idleSummaryText(min);
+  } catch (err) {
+    console.warn("[auth-notes] settings:get failed", err);
+  }
+}
+
+function bindSettings() {
+  const back = document.getElementById("settings-back");
+  back?.addEventListener("click", async () => {
+    show("view-vault");
+    await refreshCurrentSite();
+  });
+
+  const select = document.getElementById("idle-select");
+  const summary = document.getElementById("idle-summary");
+  const saved = document.getElementById("settings-saved");
+  select?.addEventListener("change", async () => {
+    const min = Number(select.value);
+    if (summary) summary.textContent = idleSummaryText(min);
+    try {
+      await send("settings:set", { settings: { idleTimeoutMin: min } });
+      if (saved) {
+        saved.hidden = false;
+        saved.animate(
+          [{ opacity: 0, transform: "translateY(2px)" }, { opacity: 1, transform: "translateY(0)" }],
+          { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+        );
+        clearTimeout(bindSettings._t);
+        bindSettings._t = setTimeout(() => { saved.hidden = true; }, 1400);
+      }
+    } catch (err) {
+      console.warn("[auth-notes] settings:set failed", err);
     }
   });
 }
@@ -311,6 +371,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindReveal();
   bindSetupForm();
   bindUnlockForm();
+  bindSettings();
 
   const lockBtn = document.getElementById("lock-btn");
   lockBtn?.addEventListener("click", () => {
@@ -327,6 +388,7 @@ document.addEventListener("DOMContentLoaded", () => {
       [{ transform: "scale(1)" }, { transform: "scale(0.92)" }, { transform: "scale(1)" }],
       { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
     );
+    openSettings();
   });
 
   route();

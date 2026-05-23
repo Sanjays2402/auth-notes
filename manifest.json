@@ -5,7 +5,8 @@
   "description": "Per-site encrypted notes about which auth method/2FA/email you used. Local only, no sync, no cloud.",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "alarms"
   ],
   "host_permissions": [],
   "action": {

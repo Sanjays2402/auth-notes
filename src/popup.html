@@ -218,6 +218,46 @@
         </div>
       </div>
     </section>
+    <!-- Settings -->
+    <section id="view-settings" class="view settings" hidden>
+      <div class="settings-head">
+        <button type="button" id="settings-back" class="icon-btn" title="Back" aria-label="Back">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+        </button>
+        <h2 class="view-title settings-title">Settings</h2>
+      </div>
+      <div class="glass settings-card">
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <span class="settings-row-title">Auto-lock after idle</span>
+            <span class="settings-row-sub" id="idle-summary">Locks the vault when there's no activity.</span>
+          </div>
+        </div>
+        <div class="settings-control">
+          <label class="field">
+            <span class="field-label">Idle timeout</span>
+            <div class="select-wrap">
+              <select id="idle-select">
+                <option value="0">Off</option>
+                <option value="1">1 minute</option>
+                <option value="5">5 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="60">1 hour</option>
+                <option value="240">4 hours</option>
+              </select>
+              <svg class="select-caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </div>
+          </label>
+          <p class="settings-hint" id="settings-saved" hidden>Saved.</p>
+        </div>
+      </div>
+    </section>
+
   </main>
   <footer class="footer"><span class="version">v0.1.0</span></footer>
   <script type="module" src="popup.js"></script>

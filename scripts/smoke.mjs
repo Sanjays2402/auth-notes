@@ -115,4 +115,24 @@ for (const needle of ["master:verify", "master:lock", "bindUnlockForm", "lockVau
   if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
 }
 
+// --- Auto-lock idle settings ---
+const manifestText = fs.readFileSync("manifest.json", "utf8");
+const manifest = JSON.parse(manifestText);
+if (!Array.isArray(manifest.permissions) || !manifest.permissions.includes("alarms")) {
+  console.error("manifest missing 'alarms' permission for auto-lock"); process.exit(1);
+}
+const bgSrc = fs.readFileSync("src/background.js", "utf8");
+for (const needle of [
+  "settings:get", "settings:set", "chrome.alarms", "scheduleAutoLockAlarm",
+  "performAutoLock", "lastActivityAt", "idleTimeoutMin",
+]) {
+  if (!bgSrc.includes(needle)) { console.error("background.js missing", needle); process.exit(1); }
+}
+for (const needle of ["view-settings", "idle-select", "settings-back"]) {
+  if (!popupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+for (const needle of ["settings:get", "settings:set", "openSettings", "idleSummaryText"]) {
+  if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+
 console.log("\u2713 smoke ok");
