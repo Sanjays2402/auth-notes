@@ -299,6 +299,23 @@
           <p class="settings-hint" id="settings-saved" hidden>Saved.</p>
         </div>
       </div>
+      <div class="glass settings-card">
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <span class="settings-row-title">Encrypted backup</span>
+            <span class="settings-row-sub" id="export-sub">Download every note as an AES-GCM sealed <code>.json.enc</code>. Your master password is still required to restore it.</span>
+          </div>
+        </div>
+        <div class="settings-control">
+          <button type="button" id="export-btn" class="btn-secondary">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/>
+            </svg>
+            <span class="btn-label">Export encrypted backup</span>
+          </button>
+          <p class="settings-hint" id="export-status" role="status" hidden></p>
+        </div>
+      </div>
     </section>
 
   </main>

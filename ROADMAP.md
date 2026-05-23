@@ -10,7 +10,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Lock/unlock with master password
 - [x] Auto-lock after N minutes idle
 - [x] Search across all sites
-- [ ] Export encrypted backup (.json.enc)
+- [x] Export encrypted backup (.json.enc)
 - [ ] Import encrypted backup
 - [ ] Tag system (work, personal, banking, etc.)
 - [ ] Quick-add from popup with current URL prefilled

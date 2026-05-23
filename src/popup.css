@@ -313,6 +313,47 @@ body[data-theme="light"] .strength-bar { background: rgba(0, 0, 0, 0.08); }
 .btn-primary:disabled { opacity: 0.6; cursor: progress; }
 .btn-primary.is-busy .btn-label::after { content: "\2026"; margin-left: 2px; }
 
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 9px;
+  cursor: pointer;
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+body[data-theme="light"] .btn-secondary {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.btn-secondary:hover { transform: translateY(-1px); background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.18); }
+body[data-theme="light"] .btn-secondary:hover { background: #fff; border-color: rgba(0,0,0,0.12); }
+.btn-secondary:active { transform: translateY(0) scale(0.99); }
+.btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }
+.btn-secondary:disabled { opacity: 0.55; cursor: progress; }
+.btn-secondary.is-busy .btn-label::after { content: "\2026"; margin-left: 2px; }
+.settings-row-sub code {
+  font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+body[data-theme="light"] .settings-row-sub code {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.06);
+}
+
 /* --- Vault: current-site card -------------------------------------- */
 
 .vault { padding: 0; display: block; }
@@ -620,6 +661,8 @@ body[data-theme="light"] .select-wrap select {
   color: #6fe3a3;
   letter-spacing: 0.01em;
 }
+.settings-hint[data-tone="err"] { color: #ff8a98; }
+.settings-hint[data-tone="ok"] { color: #6fe3a3; }
 
 /* --- Search view --------------------------------------------------- */
 .view.search {

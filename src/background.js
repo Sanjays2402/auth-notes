@@ -20,6 +20,10 @@ const STORAGE_KEY_AUTH = "an:auth";
 const STORAGE_KEY_NOTES = "an:notes";
 const STORAGE_KEY_SETTINGS = "an:settings";
 
+// Backup file format identifier — bumped only on breaking layout changes.
+const BACKUP_FORMAT = "auth-notes-backup";
+const BACKUP_SCHEMA = 1;
+
 // Auto-lock
 const ALARM_AUTO_LOCK = "an:auto-lock-check";
 const DEFAULT_IDLE_MIN = 5;
@@ -220,6 +224,35 @@ async function writeEnvelopes(envelopes) {
   for (const env of envelopes) assertEnvelopeSealed(env);
   await chrome.storage.local.set({ [STORAGE_KEY_NOTES]: envelopes });
 }
+
+handlers["backup:export"] = async () => {
+  // Vault must be unlocked so the user has just proven they hold the master
+  // password — this prevents drive-by extensions / pages from prompting an
+  // export of opaque-but-recoverable ciphertext.
+  requireUnlocked();
+  const auth = await readAuth();
+  if (!auth) throw new Error("master password not set");
+  const envelopes = await readEnvelopes();
+  // Defense in depth: refuse to export anything that isn't fully sealed.
+  for (const env of envelopes) assertEnvelopeSealed(env);
+  const payload = {
+    format: BACKUP_FORMAT,
+    schema: BACKUP_SCHEMA,
+    appVersion: VERSION,
+    exportedAt: Date.now(),
+    auth,
+    envelopes,
+  };
+  const json = JSON.stringify(payload, null, 2);
+  const ts = new Date(payload.exportedAt).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  return {
+    filename: `auth-notes-backup-${ts}.json.enc`,
+    mime: "application/octet-stream",
+    content: json,
+    count: envelopes.length,
+    exportedAt: payload.exportedAt,
+  };
+};
 
 handlers["notes:audit"] = async () => {
   const envelopes = await readEnvelopes();

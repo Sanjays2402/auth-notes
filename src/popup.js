@@ -171,6 +171,8 @@ function bindSettings() {
     await refreshCurrentSite();
   });
 
+  bindExport();
+
   const select = document.getElementById("idle-select");
   const summary = document.getElementById("idle-summary");
   const saved = document.getElementById("settings-saved");
@@ -190,6 +192,59 @@ function bindSettings() {
       }
     } catch (err) {
       console.warn("[auth-notes] settings:set failed", err);
+    }
+  });
+}
+
+// --- Encrypted backup export ----------------------------------------
+
+function triggerDownload(filename, content, mime) {
+  const blob = new Blob([content], { type: mime || "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoke after the click has been queued; some browsers need a tick.
+  setTimeout(() => URL.revokeObjectURL(url), 1200);
+}
+
+function setExportStatus(text, tone) {
+  const el = document.getElementById("export-status");
+  if (!el) return;
+  if (!text) { el.hidden = true; el.textContent = ""; el.removeAttribute("data-tone"); return; }
+  el.textContent = text;
+  el.hidden = false;
+  if (tone) el.dataset.tone = tone; else el.removeAttribute("data-tone");
+}
+
+function bindExport() {
+  const btn = document.getElementById("export-btn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    btn.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }, { transform: "scale(1)" }],
+      { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    btn.disabled = true;
+    btn.classList.add("is-busy");
+    setExportStatus("Preparing backup\u2026");
+    try {
+      const data = await send("backup:export");
+      triggerDownload(data.filename, data.content, data.mime);
+      const n = Number(data.count) || 0;
+      setExportStatus(`Saved \u2014 ${n} note${n === 1 ? "" : "s"} sealed.`, "ok");
+      clearTimeout(bindExport._t);
+      bindExport._t = setTimeout(() => setExportStatus(""), 3200);
+    } catch (err) {
+      console.warn("[auth-notes] export failed", err);
+      setExportStatus(`Export failed: ${err?.message || err}`, "err");
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("is-busy");
     }
   });
 }

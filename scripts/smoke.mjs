@@ -135,4 +135,48 @@ for (const needle of ["settings:get", "settings:set", "openSettings", "idleSumma
   if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
 }
 
+// --- Encrypted backup export ---
+for (const needle of ["backup:export", "BACKUP_FORMAT", "BACKUP_SCHEMA"]) {
+  if (!bgSrc.includes(needle)) { console.error("background.js missing", needle); process.exit(1); }
+}
+for (const needle of ["export-btn", "export-status"]) {
+  if (!popupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+for (const needle of ["backup:export", "triggerDownload", "bindExport"]) {
+  if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+
+// Simulate the export payload assembly to ensure the shape is sound and that
+// sealed envelopes survive a JSON round-trip + decrypt with the same key.
+const envelopes = [env];
+const exportPayload = {
+  format: "auth-notes-backup",
+  schema: 1,
+  appVersion: m.version,
+  exportedAt: Date.now(),
+  auth: record,
+  envelopes,
+};
+for (const e of exportPayload.envelopes) notes.assertEnvelopeSealed(e);
+const exportJson = JSON.stringify(exportPayload);
+if (exportJson.includes("me@example.com") || exportJson.includes("YubiKey")) {
+  console.error("export payload leaked plaintext sensitive fields");
+  process.exit(1);
+}
+const restored = JSON.parse(exportJson);
+if (restored.format !== "auth-notes-backup" || restored.schema !== 1) {
+  console.error("export payload header malformed"); process.exit(1);
+}
+if (!restored.auth?.salt || !restored.auth?.verifier?.ct) {
+  console.error("export payload missing auth record"); process.exit(1);
+}
+if (!Array.isArray(restored.envelopes) || restored.envelopes.length !== 1) {
+  console.error("export payload envelopes missing"); process.exit(1);
+}
+const restoredKey = await mod.verifyPassword(password, restored.auth);
+const restoredNote = await notes.decryptNote(restoredKey, restored.envelopes[0]);
+if (restoredNote.email !== "me@example.com") {
+  console.error("export round-trip decrypt failed"); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");
