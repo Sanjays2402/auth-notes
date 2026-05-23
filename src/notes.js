@@ -133,6 +133,58 @@ export async function decryptNote(key, envelope) {
   return obj;
 }
 
+/** Fields that are allowed to appear on a stored envelope. Anything else
+ *  is treated as a plaintext leak and rejected before write. */
+export const ENVELOPE_ALLOWED_KEYS = Object.freeze(["id", "origin", "iv", "ct"]);
+
+/** Fields that must NEVER appear in plaintext at rest. */
+export const ENVELOPE_FORBIDDEN_KEYS = Object.freeze([
+  "label",
+  "email",
+  "authMethod",
+  "twofaBackup",
+  "twofaDetail",
+  "notes",
+  "createdAt",
+  "updatedAt",
+]);
+
+/**
+ * Throws if the envelope shape would leak plaintext sensitive fields at rest.
+ * Only `id`, `origin`, `iv`, `ct` are permitted. The first three are indexes;
+ * `ct` is the AES-GCM ciphertext. Everything else is forbidden.
+ */
+export function assertEnvelopeSealed(envelope) {
+  if (!envelope || typeof envelope !== "object") {
+    throw new Error("envelope must be an object");
+  }
+  for (const k of ENVELOPE_ALLOWED_KEYS) {
+    if (typeof envelope[k] !== "string" || envelope[k].length === 0) {
+      throw new Error(`envelope missing required field: ${k}`);
+    }
+  }
+  for (const k of Object.keys(envelope)) {
+    if (!ENVELOPE_ALLOWED_KEYS.includes(k)) {
+      throw new Error(`envelope leaks plaintext field: ${k}`);
+    }
+  }
+}
+
+/**
+ * Audit a list of stored envelopes. Returns { total, leaks, sealed }.
+ * `leaks` lists envelopes with any forbidden plaintext keys.
+ */
+export function auditEnvelopes(envelopes) {
+  const list = Array.isArray(envelopes) ? envelopes : [];
+  const leaks = [];
+  for (const env of list) {
+    if (!env || typeof env !== "object") continue;
+    const bad = Object.keys(env).filter((k) => !ENVELOPE_ALLOWED_KEYS.includes(k));
+    if (bad.length > 0) leaks.push({ id: env.id || null, fields: bad });
+  }
+  return { total: list.length, leaks, sealed: list.length - leaks.length };
+}
+
 /** Sort a list of decrypted notes by updatedAt desc, then label asc. */
 export function sortNotes(list) {
   return [...list].sort((a, b) => {

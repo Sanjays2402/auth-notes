@@ -5,6 +5,8 @@ import { buildSetupRecord, verifyPassword } from "./crypto.js";
 import {
   AUTH_METHODS,
   TWOFA_BACKUPS,
+  assertEnvelopeSealed,
+  auditEnvelopes,
   decryptNote,
   encryptNote,
   normalizeNote,
@@ -125,8 +127,16 @@ async function readEnvelopes() {
 }
 
 async function writeEnvelopes(envelopes) {
+  // Invariant: every note in chrome.storage.local must be sealed.
+  // Any envelope containing plaintext sensitive fields is rejected before write.
+  for (const env of envelopes) assertEnvelopeSealed(env);
   await chrome.storage.local.set({ [STORAGE_KEY_NOTES]: envelopes });
 }
+
+handlers["notes:audit"] = async () => {
+  const envelopes = await readEnvelopes();
+  return auditEnvelopes(envelopes);
+};
 
 handlers["notes:schema"] = async () => ({
   authMethods: AUTH_METHODS,

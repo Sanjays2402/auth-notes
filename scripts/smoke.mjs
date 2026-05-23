@@ -84,4 +84,25 @@ if (sorted[0].label !== "b" || sorted[2].label !== "a") {
   console.error("sort order wrong"); process.exit(1);
 }
 
+// --- Encrypted-at-rest invariants ---
+notes.assertEnvelopeSealed(env);
+
+let leakRejected = false;
+try { notes.assertEnvelopeSealed({ ...env, email: "leak@example.com" }); }
+catch { leakRejected = true; }
+if (!leakRejected) { console.error("sealed-envelope leak should reject"); process.exit(1); }
+
+let missingRejected = false;
+try { notes.assertEnvelopeSealed({ id: env.id, origin: env.origin, iv: env.iv }); }
+catch { missingRejected = true; }
+if (!missingRejected) { console.error("missing ct should reject"); process.exit(1); }
+
+const audit = notes.auditEnvelopes([env, { id: "x", origin: "a", iv: "i", ct: "c", notes: "plaintext!" }]);
+if (audit.total !== 2 || audit.sealed !== 1 || audit.leaks.length !== 1) {
+  console.error("auditEnvelopes wrong", audit); process.exit(1);
+}
+if (!audit.leaks[0].fields.includes("notes")) {
+  console.error("audit leak field missing", audit.leaks[0]); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");
