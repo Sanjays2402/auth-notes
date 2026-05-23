@@ -327,6 +327,101 @@ export function planImport(existing, incoming, mode = "merge") {
   };
 }
 
+// --- Audit log --------------------------------------------------------
+
+/** Recognised audit event types. Anything else is rejected to keep the log
+ *  small and predictable. */
+export const AUDIT_EVENT_TYPES = Object.freeze([
+  "setup",
+  "unlock",
+  "lock",
+  "auto-lock",
+  "note:create",
+  "note:update",
+  "note:delete",
+  "note:view",
+  "backup:export",
+  "backup:import",
+  "audit:clear",
+]);
+
+export const AUDIT_SCHEMA = 1;
+/** Hard cap on stored audit envelopes. Old entries roll off FIFO. */
+export const AUDIT_MAX = 500;
+const AUDIT_DETAIL_MAX = 256;
+
+/** Fields allowed on a stored audit envelope. `ts` is plaintext so the log
+ *  can be sorted/paginated without decrypting every entry; everything that
+ *  reveals user data lives inside `ct`. */
+export const AUDIT_ENVELOPE_ALLOWED_KEYS = Object.freeze(["id", "ts", "iv", "ct"]);
+
+/** Normalize an audit event input → record. Throws on unknown type. */
+export function normalizeAuditEvent(input, { now = Date.now() } = {}) {
+  if (!input || typeof input !== "object") throw new Error("audit event must be an object");
+  const type = String(input.type || "").toLowerCase();
+  if (!AUDIT_EVENT_TYPES.includes(type)) throw new Error(`unknown audit event type: ${type}`);
+  const ts = Number.isFinite(input.ts) ? input.ts : now;
+  const record = {
+    id: typeof input.id === "string" && input.id ? input.id : newId(),
+    schema: AUDIT_SCHEMA,
+    type,
+    ts,
+  };
+  if (input.origin) {
+    const o = originOf(input.origin);
+    if (o) record.origin = o.slice(0, MAX_ORIGIN);
+  }
+  if (input.noteId) record.noteId = String(input.noteId).slice(0, 64);
+  if (input.detail != null && input.detail !== "") {
+    record.detail = String(input.detail).slice(0, AUDIT_DETAIL_MAX);
+  }
+  return record;
+}
+
+/** Encrypt an audit record → { id, ts, iv, ct }. ts stays plaintext so the
+ *  popup can render times without decrypting. */
+export async function encryptAuditEvent(key, record) {
+  const json = JSON.stringify(record);
+  const payload = await encryptString(key, json);
+  return { id: record.id, ts: record.ts, iv: payload.iv, ct: payload.ct };
+}
+
+/** Decrypt an audit envelope back into its record. */
+export async function decryptAuditEvent(key, envelope) {
+  if (!envelope || typeof envelope !== "object") throw new Error("bad audit envelope");
+  const json = await decryptString(key, { iv: envelope.iv, ct: envelope.ct });
+  const obj = JSON.parse(json);
+  if (!obj || typeof obj !== "object") throw new Error("bad audit payload");
+  return obj;
+}
+
+/** Throws if an audit envelope would leak sensitive plaintext at rest. */
+export function assertAuditEnvelopeSealed(envelope) {
+  if (!envelope || typeof envelope !== "object") {
+    throw new Error("audit envelope must be an object");
+  }
+  for (const k of AUDIT_ENVELOPE_ALLOWED_KEYS) {
+    if (k === "ts") {
+      if (!Number.isFinite(envelope.ts)) throw new Error("audit envelope missing required field: ts");
+    } else if (typeof envelope[k] !== "string" || envelope[k].length === 0) {
+      throw new Error(`audit envelope missing required field: ${k}`);
+    }
+  }
+  for (const k of Object.keys(envelope)) {
+    if (!AUDIT_ENVELOPE_ALLOWED_KEYS.includes(k)) {
+      throw new Error(`audit envelope leaks plaintext field: ${k}`);
+    }
+  }
+}
+
+/** Trim an audit envelope list to `AUDIT_MAX`, keeping newest by `ts`. */
+export function trimAuditLog(envelopes, max = AUDIT_MAX) {
+  const list = Array.isArray(envelopes) ? envelopes.slice() : [];
+  list.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  if (list.length <= max) return list;
+  return list.slice(list.length - max);
+}
+
 /** Sort a list of decrypted notes by updatedAt desc, then label asc. */
 export function sortNotes(list) {
   return [...list].sort((a, b) => {

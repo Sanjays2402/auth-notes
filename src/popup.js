@@ -8,13 +8,13 @@ function applyTheme() {
 function show(id) {
   for (const v of document.querySelectorAll(".view")) v.hidden = v.id !== id;
   const lockBtn = document.getElementById("lock-btn");
-  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search" && id !== "view-quick-add";
+  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search" && id !== "view-quick-add" && id !== "view-audit";
   const searchBtn = document.getElementById("search-btn");
   if (searchBtn) searchBtn.hidden = id !== "view-vault";
   const addBtn = document.getElementById("add-btn");
   if (addBtn) addBtn.hidden = id !== "view-vault";
   const settingsBtn = document.getElementById("settings-btn");
-  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search" || id === "view-quick-add";
+  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search" || id === "view-quick-add" || id === "view-audit";
 }
 
 async function send(type, payload = {}) {
@@ -175,6 +175,7 @@ function bindSettings() {
 
   bindExport();
   bindImport();
+  bindAudit();
 
   const select = document.getElementById("idle-select");
   const summary = document.getElementById("idle-summary");
@@ -375,6 +376,132 @@ function bindImport() {
     } finally {
       runBtn.disabled = false;
       runBtn.classList.remove("is-busy");
+    }
+  });
+}
+
+// --- Audit log -------------------------------------------------------
+
+const AUDIT_ICONS = {
+  "setup":         '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
+  "unlock":        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 7.5-2"/></svg>',
+  "lock":          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
+  "auto-lock":     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>',
+  "note:create":   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5z"/><path d="M12 11v6M9 14h6"/></svg>',
+  "note:update":   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6-11 11H3v-6z"/><path d="M13 5l6 6"/></svg>',
+  "note:delete":   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>',
+  "note:view":     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  "backup:export": '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>',
+  "backup:import": '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V8"/><path d="M7 13l5-5 5 5"/><path d="M5 4h14"/></svg>',
+  "audit:clear":   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
+};
+
+const AUDIT_TITLES = {
+  "setup": "Vault created",
+  "unlock": "Vault unlocked",
+  "lock": "Vault locked",
+  "auto-lock": "Auto-locked",
+  "note:create": "Note added",
+  "note:update": "Note edited",
+  "note:delete": "Note deleted",
+  "note:view": "Note viewed",
+  "backup:export": "Backup exported",
+  "backup:import": "Backup restored",
+  "audit:clear": "Audit log cleared",
+};
+
+function auditIcon(type) {
+  return AUDIT_ICONS[type] || '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/></svg>';
+}
+function auditTitle(type) {
+  return AUDIT_TITLES[type] || String(type || "event");
+}
+function formatAuditTime(ts) {
+  if (!Number.isFinite(ts)) return "";
+  const d = new Date(ts);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (sameDay) return time;
+  const ms = now.getTime() - d.getTime();
+  if (ms < 7 * 24 * 60 * 60 * 1000 && ms > 0) {
+    return `${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+  }
+  return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
+}
+
+async function renderAuditLog() {
+  const list = document.getElementById("audit-list");
+  const empty = document.getElementById("audit-empty");
+  const summary = document.getElementById("audit-summary");
+  if (!list || !empty || !summary) return;
+  let payload;
+  try { payload = await send("audit:list", { limit: 200 }); }
+  catch (err) {
+    console.warn("[auth-notes] audit:list failed", err);
+    list.innerHTML = "";
+    empty.hidden = false;
+    summary.textContent = "";
+    return;
+  }
+  const events = Array.isArray(payload?.events) ? payload.events : [];
+  list.innerHTML = "";
+  if (events.length === 0) {
+    empty.hidden = false;
+    summary.textContent = "";
+    return;
+  }
+  empty.hidden = true;
+  const total = Number.isFinite(payload?.total) ? payload.total : events.length;
+  summary.textContent = `${total} event${total === 1 ? "" : "s"} sealed${total > events.length ? ` • showing ${events.length}` : ""}`;
+  const frag = document.createDocumentFragment();
+  for (const ev of events) {
+    const li = document.createElement("li");
+    li.className = "audit-item";
+    const subParts = [];
+    if (ev.origin) subParts.push(ev.origin);
+    if (ev.detail) subParts.push(ev.detail);
+    const sub = subParts.join(" • ");
+    li.innerHTML = `
+      <span class="audit-icon" data-kind="${escapeHtml(ev.type)}" aria-hidden="true">${auditIcon(ev.type)}</span>
+      <span class="audit-body">
+        <span class="audit-title">${escapeHtml(auditTitle(ev.type))}</span>
+        ${sub ? `<span class="audit-sub">${escapeHtml(sub)}</span>` : ""}
+      </span>
+      <span class="audit-time">${escapeHtml(formatAuditTime(ev.ts))}</span>
+    `;
+    frag.appendChild(li);
+  }
+  list.appendChild(frag);
+}
+
+async function openAuditLog() {
+  show("view-audit");
+  await renderAuditLog();
+}
+
+function bindAudit() {
+  const opener = document.getElementById("audit-open");
+  opener?.addEventListener("click", () => {
+    opener.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }, { transform: "scale(1)" }],
+      { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    openAuditLog();
+  });
+  const back = document.getElementById("audit-back");
+  back?.addEventListener("click", () => openSettings());
+  const clear = document.getElementById("audit-clear");
+  clear?.addEventListener("click", async () => {
+    if (!confirm("Clear the audit log? A single 'cleared' entry remains.")) return;
+    clear.disabled = true;
+    try {
+      await send("audit:clear");
+      await renderAuditLog();
+    } catch (err) {
+      console.warn("[auth-notes] audit:clear failed", err);
+    } finally {
+      clear.disabled = false;
     }
   });
 }

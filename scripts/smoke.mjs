@@ -299,4 +299,68 @@ for (const needle of [
   if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
 }
 
+// --- Encrypted audit log -------------------------------------------
+for (const needle of [
+  "audit:list", "audit:clear", "recordAuditEvent", "assertAuditEnvelopeSealed",
+  "STORAGE_KEY_AUDIT", "normalizeAuditEvent", "encryptAuditEvent", "decryptAuditEvent",
+]) {
+  if (!bgSrc.includes(needle)) { console.error("background.js missing", needle); process.exit(1); }
+}
+for (const needle of ["audit-open", "audit-clear", "audit-list", "view-audit"]) {
+  if (!popupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+for (const needle of ["bindAudit", "openAuditLog", "renderAuditLog", "audit:list", "audit:clear"]) {
+  if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+
+if (!Array.isArray(notes.AUDIT_EVENT_TYPES) || !notes.AUDIT_EVENT_TYPES.includes("unlock")) {
+  console.error("AUDIT_EVENT_TYPES missing"); process.exit(1);
+}
+if (notes.AUDIT_MAX !== 500) { console.error("AUDIT_MAX drift"); process.exit(1); }
+
+const auditNow = 1_700_000_000_000;
+const auditNorm = notes.normalizeAuditEvent({
+  type: "note:update",
+  origin: "https://github.com/login",
+  noteId: "abc123",
+  detail: "renamed label",
+}, { now: auditNow });
+if (auditNorm.type !== "note:update" || auditNorm.origin !== "github.com") {
+  console.error("normalizeAuditEvent wrong", auditNorm); process.exit(1);
+}
+if (auditNorm.ts !== auditNow) { console.error("audit ts not honored"); process.exit(1); }
+
+let badAuditThrew = false;
+try { notes.normalizeAuditEvent({ type: "nope" }); } catch { badAuditThrew = true; }
+if (!badAuditThrew) { console.error("unknown audit type should reject"); process.exit(1); }
+
+const auditEnv = await notes.encryptAuditEvent(key, auditNorm);
+notes.assertAuditEnvelopeSealed(auditEnv);
+const auditBack = await notes.decryptAuditEvent(key, auditEnv);
+if (auditBack.type !== "note:update" || auditBack.noteId !== "abc123" || auditBack.detail !== "renamed label") {
+  console.error("audit round-trip failed", auditBack); process.exit(1);
+}
+
+// Envelope must NOT carry plaintext type/origin/detail/noteId.
+const auditEnvJson = JSON.stringify(auditEnv);
+if (auditEnvJson.includes("renamed label") || auditEnvJson.includes("github.com") || auditEnvJson.includes("note:update")) {
+  console.error("audit envelope leaked plaintext"); process.exit(1);
+}
+
+let auditLeakRejected = false;
+try { notes.assertAuditEnvelopeSealed({ ...auditEnv, type: "unlock" }); } catch { auditLeakRejected = true; }
+if (!auditLeakRejected) { console.error("audit envelope leak must be rejected"); process.exit(1); }
+
+let auditMissingRejected = false;
+try { notes.assertAuditEnvelopeSealed({ id: "x", iv: "i", ct: "c" }); } catch { auditMissingRejected = true; }
+if (!auditMissingRejected) { console.error("audit envelope missing ts must reject"); process.exit(1); }
+
+// trimAuditLog keeps newest-by-ts up to the cap.
+const many = [];
+for (let i = 0; i < 12; i++) many.push({ id: `e${i}`, ts: i, iv: "i", ct: "c" });
+const trimmed = notes.trimAuditLog(many, 5);
+if (trimmed.length !== 5 || trimmed[0].ts !== 7 || trimmed[4].ts !== 11) {
+  console.error("trimAuditLog wrong", trimmed.map((e) => e.ts)); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");

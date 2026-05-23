@@ -3,22 +3,28 @@
 
 import { buildSetupRecord, verifyPassword } from "./crypto.js";
 import {
+  AUDIT_MAX,
   AUTH_METHODS,
   BACKUP_FORMAT,
   BACKUP_SCHEMA,
   TAG_PRESETS,
   TWOFA_BACKUPS,
+  assertAuditEnvelopeSealed,
   assertEnvelopeSealed,
   auditEnvelopes,
   collectTags,
   decodeBackupContent,
+  decryptAuditEvent,
   decryptNote,
+  encryptAuditEvent,
   encryptNote,
+  normalizeAuditEvent,
   normalizeNote,
   normalizeTag,
   originOf,
   planImport,
   sortNotes,
+  trimAuditLog,
 } from "./notes.js";
 
 const VERSION = "0.1.0";
@@ -26,6 +32,7 @@ const STORAGE_KEY_META = "an:meta";
 const STORAGE_KEY_AUTH = "an:auth";
 const STORAGE_KEY_NOTES = "an:notes";
 const STORAGE_KEY_SETTINGS = "an:settings";
+const STORAGE_KEY_AUDIT = "an:audit";
 
 // Backup file format identifier sourced from notes.js so importer + exporter
 // agree on the layout.
@@ -116,6 +123,10 @@ async function scheduleAutoLockAlarm() {
 
 async function performAutoLock(reason = "idle") {
   if (!unlockedKey) return;
+  // Record the auto-lock while we still hold the key, so the entry can be
+  // sealed under the same vault key the user will unlock with next.
+  try { await recordAuditEvent({ type: "auto-lock", detail: reason }); }
+  catch (err) { console.warn("[auth-notes] audit auto-lock failed", err); }
   unlockedKey = null;
   await clearAutoLockAlarm();
   await writeMeta({ locked: true });
@@ -251,6 +262,7 @@ handlers["backup:export"] = async () => {
   };
   const json = JSON.stringify(payload, null, 2);
   const ts = new Date(payload.exportedAt).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  await recordAuditEvent({ type: "backup:export", detail: `${envelopes.length} notes` });
   return {
     filename: `auth-notes-backup-${ts}.json.enc`,
     mime: "application/octet-stream",
@@ -258,6 +270,30 @@ handlers["backup:export"] = async () => {
     count: envelopes.length,
     exportedAt: payload.exportedAt,
   };
+};
+
+handlers["audit:list"] = async (msg) => {
+  const key = requireUnlocked();
+  const limit = Math.min(Math.max(Number(msg?.limit) || 100, 1), AUDIT_MAX);
+  const envelopes = await readAuditEnvelopes();
+  // Newest first.
+  const sorted = envelopes.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const out = [];
+  for (const env of sorted) {
+    if (out.length >= limit) break;
+    try { out.push(await decryptAuditEvent(key, env)); }
+    catch (err) { console.warn("[auth-notes] skip undecryptable audit", env.id, err); }
+  }
+  return { total: envelopes.length, events: out };
+};
+
+handlers["audit:clear"] = async () => {
+  requireUnlocked();
+  const prior = (await readAuditEnvelopes()).length;
+  await chrome.storage.local.set({ [STORAGE_KEY_AUDIT]: [] });
+  // Seed one sealed entry recording the clear so the log isn't silently empty.
+  await recordAuditEvent({ type: "audit:clear", detail: `cleared ${prior} entries` });
+  return { cleared: prior };
 };
 
 handlers["backup:import"] = async (msg) => {
@@ -305,6 +341,10 @@ handlers["backup:import"] = async (msg) => {
     next = [...byId.values()];
   }
   await writeEnvelopes(next);
+  await recordAuditEvent({
+    type: "backup:import",
+    detail: `${mode} • +${plan.added} ~${plan.replaced}${plan.discarded ? ` -${plan.discarded}` : ""}${failed ? ` (${failed} skipped)` : ""}`,
+  });
   return {
     mode,
     total: plan.total,

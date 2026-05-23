@@ -14,6 +14,6 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Import encrypted backup
 - [x] Tag system (work, personal, banking, etc.)
 - [x] Quick-add from popup with current URL prefilled
-- [ ] Audit log of access events (encrypted)
+- [x] Audit log of access events (encrypted)
 - [ ] Liquid-glass popup UI
 - [ ] Dark/light theme

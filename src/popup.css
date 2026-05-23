@@ -1009,3 +1009,86 @@ body[data-theme="light"] .textarea-wrap textarea:focus { background: rgba(255, 2
 .match-actions .btn-compact { margin-left: 0; }
 
 #site-empty-add { margin-top: 12px; }
+
+/* Audit log */
+.settings-head { position: relative; }
+.audit-clear {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.audit-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.audit-item {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+body[data-theme="light"] .audit-item {
+  background: rgba(255,255,255,0.6);
+  border-color: rgba(0,0,0,0.08);
+}
+.audit-item:hover {
+  border-color: rgba(255,255,255,0.18);
+  transform: translateY(-1px);
+}
+body[data-theme="light"] .audit-item:hover { border-color: rgba(0,0,0,0.14); }
+.audit-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  background: rgba(120, 170, 255, 0.10);
+  border: 1px solid rgba(120, 170, 255, 0.22);
+}
+.audit-icon[data-kind="lock"], .audit-icon[data-kind="auto-lock"] {
+  color: #ff8a98;
+  background: rgba(255, 122, 138, 0.10);
+  border-color: rgba(255, 122, 138, 0.28);
+}
+.audit-icon[data-kind="unlock"], .audit-icon[data-kind="setup"] {
+  color: #6fe3a3;
+  background: rgba(111, 227, 163, 0.10);
+  border-color: rgba(111, 227, 163, 0.28);
+}
+.audit-icon[data-kind="backup:export"], .audit-icon[data-kind="backup:import"] {
+  color: #ffd66b;
+  background: rgba(255, 214, 107, 0.10);
+  border-color: rgba(255, 214, 107, 0.28);
+}
+.audit-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.audit-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.audit-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audit-time {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
