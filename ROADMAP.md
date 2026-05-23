@@ -19,7 +19,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Dark/light theme
 - [x] Password strength hints recorded per site (length, complexity bucket)
 - [x] Recovery codes vault section with masked reveal
-- [ ] Per-note last-used date + auto-sort by recency
+- [x] Per-note last-used date + auto-sort by recency
 - [ ] Bulk tag editor with multi-select
 - [ ] Keyboard shortcut to open popup on current tab
 - [ ] Favicon thumbnail next to each site entry

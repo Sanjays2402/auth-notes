@@ -508,6 +508,37 @@ handlers["notes:delete"] = async (msg) => {
   return { deleted: envelopes.length - next.length };
 };
 
+/**
+ * Bump a note's `lastUsedAt` timestamp. Called when the popup surfaces a
+ * matching note for the current tab so the auto-sort puts frequently-revisited
+ * sites at the top. The whole record is re-sealed under the unlocked key —
+ * the storage envelope stays plaintext-clean by construction.
+ *
+ * Debounced at the envelope level: if the existing `lastUsedAt` is within the
+ * minimum interval (30s) the call is a no-op to avoid storage churn every
+ * time the popup is opened.
+ */
+const TOUCH_DEBOUNCE_MS = 30_000;
+handlers["notes:touch"] = async (msg) => {
+  const key = requireUnlocked();
+  const id = String(msg?.id || "");
+  if (!id) throw new Error("id is required");
+  const envelopes = await readEnvelopes();
+  const idx = envelopes.findIndex((e) => e.id === id);
+  if (idx < 0) return { touched: false, reason: "not-found" };
+  let note;
+  try { note = await decryptNote(key, envelopes[idx]); }
+  catch { return { touched: false, reason: "undecryptable" }; }
+  const now = Date.now();
+  if (Number.isFinite(note.lastUsedAt) && now - Number(note.lastUsedAt) < TOUCH_DEBOUNCE_MS) {
+    return { touched: false, reason: "debounced", lastUsedAt: note.lastUsedAt };
+  }
+  const bumped = touchNoteLastUsed(note, { now });
+  envelopes[idx] = await encryptNote(key, bumped);
+  await writeEnvelopes(envelopes);
+  return { touched: true, lastUsedAt: bumped.lastUsedAt };
+};
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   const type = msg && typeof msg === "object" ? msg.type : null;
   const fn = type && handlers[type];

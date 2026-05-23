@@ -280,7 +280,20 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
   if (hint) record.passwordHint = hint;
   const codes = normalizeRecoveryCodes(input.recoveryCodes);
   if (codes.length) record.recoveryCodes = codes;
+  if (Number.isFinite(input.lastUsedAt)) {
+    // Don't allow future-dated timestamps; clamp to `now`.
+    record.lastUsedAt = Math.min(Number(input.lastUsedAt), now);
+  }
   return record;
+}
+
+/** Bump a note's `lastUsedAt` to `now` without mutating other fields. Returns
+ *  a fresh record so callers can re-encrypt without aliasing surprises. The
+ *  caller is responsible for re-sealing the result; this never touches
+ *  `updatedAt` because "last used" is a separate axis from "last edited". */
+export function touchNoteLastUsed(record, { now = Date.now() } = {}) {
+  if (!record || typeof record !== "object") throw new Error("record required");
+  return { ...record, lastUsedAt: now };
 }
 
 /** Encrypt a normalized note → { id, origin, iv, ct }. Origin is kept in plaintext
@@ -523,10 +536,18 @@ export function trimAuditLog(envelopes, max = AUDIT_MAX) {
   return list.slice(list.length - max);
 }
 
-/** Sort a list of decrypted notes by updatedAt desc, then label asc. */
+/** Sort a list of decrypted notes by recency. `lastUsedAt` wins when present,
+ *  otherwise the note's `updatedAt` carries the slot. Ties break on label asc. */
+export function recencyOf(note) {
+  if (!note) return 0;
+  const used = Number(note.lastUsedAt);
+  if (Number.isFinite(used) && used > 0) return used;
+  return Number(note.updatedAt) || 0;
+}
+
 export function sortNotes(list) {
   return [...list].sort((a, b) => {
-    const dt = (b.updatedAt || 0) - (a.updatedAt || 0);
+    const dt = recencyOf(b) - recencyOf(a);
     if (dt !== 0) return dt;
     return String(a.label || "").localeCompare(String(b.label || ""));
   });

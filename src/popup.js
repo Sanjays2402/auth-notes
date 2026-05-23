@@ -1162,8 +1162,13 @@ function renderMatch(note) {
 
   const foot = document.getElementById("match-foot");
   if (foot) {
-    const rel = formatRelative(note.updatedAt);
-    foot.textContent = rel ? `Updated ${rel}` : "";
+    const used = Number(note.lastUsedAt);
+    const usedRel = Number.isFinite(used) && used > 0 ? formatRelative(used) : "";
+    const editRel = formatRelative(note.updatedAt);
+    const parts = [];
+    if (usedRel) parts.push(`Last used ${usedRel}`);
+    if (editRel) parts.push(`edited ${editRel}`);
+    foot.textContent = parts.join(" \u2022 ");
   }
 
   const tagsEl = document.getElementById("match-tags");
@@ -1270,6 +1275,9 @@ async function refreshCurrentSite() {
     const matches = await send("notes:list", { origin });
     if (Array.isArray(matches) && matches.length > 0) {
       renderMatch(matches[0]);
+      // Fire-and-forget: bump lastUsedAt so this site rises on the next sort.
+      // Debounced inside the service worker so a quick popup re-open is free.
+      send("notes:touch", { id: matches[0].id }).catch(() => { /* best-effort */ });
     } else {
       setSiteState("site-empty");
     }
