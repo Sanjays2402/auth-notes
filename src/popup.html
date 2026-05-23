@@ -569,6 +569,28 @@ efgh-5678"></textarea>
       <div class="glass settings-card">
         <div class="settings-row">
           <div class="settings-row-text">
+            <span class="settings-row-title">Keyboard shortcut</span>
+            <span class="settings-row-sub">Pop Auth Notes open on whatever tab you&rsquo;re on. Customize the binding in your browser&rsquo;s extension shortcuts page.</span>
+          </div>
+        </div>
+        <div class="settings-control">
+          <div class="shortcut-row">
+            <span class="shortcut-key" id="shortcut-keys" aria-label="Default shortcut">
+              <kbd id="shortcut-mod">Ctrl</kbd><span class="shortcut-sep" aria-hidden="true">+</span><kbd>Shift</kbd><span class="shortcut-sep" aria-hidden="true">+</span><kbd>Y</kbd>
+            </span>
+            <button type="button" id="shortcut-open" class="btn-secondary btn-compact" title="Open browser shortcuts page">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"/>
+              </svg>
+              <span class="btn-label">Customize</span>
+            </button>
+          </div>
+          <p class="settings-hint" id="shortcut-status" role="status" hidden></p>
+        </div>
+      </div>
+      <div class="glass settings-card">
+        <div class="settings-row">
+          <div class="settings-row-text">
             <span class="settings-row-title">Auto-lock after idle</span>
             <span class="settings-row-sub" id="idle-summary">Locks the vault when there's no activity.</span>
           </div>

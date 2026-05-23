@@ -208,6 +208,7 @@ function bindSettings() {
   bindImport();
   bindAudit();
   bindThemePicker();
+  bindShortcutCard();
 
   const select = document.getElementById("idle-select");
   const summary = document.getElementById("idle-summary");
@@ -281,6 +282,93 @@ function setExportStatus(text, tone) {
   el.textContent = text;
   el.hidden = false;
   if (tone) el.dataset.tone = tone; else el.removeAttribute("data-tone");
+}
+
+function isMacPlatform() {
+  try {
+    const p = (navigator.userAgentData?.platform || navigator.platform || "").toLowerCase();
+    return p.includes("mac");
+  } catch { return false; }
+}
+
+function shortcutsUrlForBrowser() {
+  try {
+    const ua = (navigator.userAgent || "").toLowerCase();
+    if (ua.includes("edg/")) return "edge://extensions/shortcuts";
+    if (ua.includes("opr/") || ua.includes("opera")) return "opera://extensions/shortcuts";
+    if (ua.includes("brave")) return "brave://extensions/shortcuts";
+  } catch { /* ignore */ }
+  return "chrome://extensions/shortcuts";
+}
+
+function bindShortcutCard() {
+  const modEl = document.getElementById("shortcut-mod");
+  if (modEl) modEl.textContent = isMacPlatform() ? "\u2318" : "Ctrl";
+  const status = document.getElementById("shortcut-status");
+  const setStatus = (msg, tone) => {
+    if (!status) return;
+    if (!msg) { status.hidden = true; status.textContent = ""; status.removeAttribute("data-tone"); return; }
+    status.textContent = msg;
+    status.hidden = false;
+    if (tone) status.dataset.tone = tone; else status.removeAttribute("data-tone");
+  };
+
+  // Reflect the live binding from chrome.commands if available.
+  (async () => {
+    try {
+      const cmds = await chrome.commands?.getAll?.();
+      if (!Array.isArray(cmds)) return;
+      const action = cmds.find((c) => c.name === "_execute_action");
+      if (action && action.shortcut && modEl?.parentElement) {
+        renderShortcutKeys(modEl.parentElement, action.shortcut);
+      } else if (action && !action.shortcut) {
+        setStatus("No shortcut assigned yet \u2014 click Customize to set one.", "err");
+      }
+    } catch { /* MV3 popup may not expose chrome.commands.getAll on all builds */ }
+  })();
+
+  const btn = document.getElementById("shortcut-open");
+  btn?.addEventListener("click", async () => {
+    const url = shortcutsUrlForBrowser();
+    try {
+      await chrome.tabs.create({ url });
+      setStatus("Opened the browser shortcuts page in a new tab.", "ok");
+      clearTimeout(bindShortcutCard._t);
+      bindShortcutCard._t = setTimeout(() => setStatus(""), 2400);
+    } catch (err) {
+      console.warn("[auth-notes] open shortcuts page failed", err);
+      setStatus(`Copy this URL into a new tab: ${url}`, "err");
+    }
+  });
+}
+
+function renderShortcutKeys(host, shortcut) {
+  if (!host) return;
+  const parts = String(shortcut)
+    .split("+")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => {
+      if (p === "Command" || p === "MacCtrl") return "\u2318";
+      if (p === "Ctrl" || p === "Control") return isMacPlatform() ? "\u2303" : "Ctrl";
+      if (p === "Alt") return isMacPlatform() ? "\u2325" : "Alt";
+      if (p === "Shift") return "Shift";
+      return p.toUpperCase();
+    });
+  host.innerHTML = "";
+  parts.forEach((label, i) => {
+    if (i > 0) {
+      const sep = document.createElement("span");
+      sep.className = "shortcut-sep";
+      sep.setAttribute("aria-hidden", "true");
+      sep.textContent = "+";
+      host.appendChild(sep);
+    }
+    const k = document.createElement("kbd");
+    if (i === 0) k.id = "shortcut-mod";
+    k.textContent = label;
+    host.appendChild(k);
+  });
 }
 
 function bindExport() {

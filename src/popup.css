@@ -792,6 +792,45 @@ body[data-theme="light"] .select-wrap select {
 .settings-hint[data-tone="err"] { color: #ff8a98; }
 .settings-hint[data-tone="ok"] { color: #6fe3a3; }
 
+/* Keyboard shortcut card */
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0;
+}
+.shortcut-key kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.25), 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+.shortcut-sep {
+  opacity: 0.5;
+  font-size: 11px;
+}
+[data-theme="light"] .shortcut-key kbd {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.06), 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
 /* Import / restore controls */
 .import-row { display: flex; gap: 8px; align-items: center; }
 .import-file-name {
