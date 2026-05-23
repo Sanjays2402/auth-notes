@@ -17,3 +17,13 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Audit log of access events (encrypted)
 - [x] Liquid-glass popup UI
 - [x] Dark/light theme
+- [ ] Password strength hints recorded per site (length, complexity bucket)
+- [ ] Recovery codes vault section with masked reveal
+- [ ] Per-note last-used date + auto-sort by recency
+- [ ] Bulk tag editor with multi-select
+- [ ] Keyboard shortcut to open popup on current tab
+- [ ] Favicon thumbnail next to each site entry
+- [ ] Settings page (options.html) for idle timeout, theme, PBKDF2 iterations
+- [ ] Quick-copy button for email-used field with auto-clear clipboard after 20s
+- [ ] Duplicate-email detector across sites (security hygiene)
+- [ ] Onboarding tour for first unlock
