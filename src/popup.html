@@ -457,6 +457,54 @@ efgh-5678"></textarea>
             <path d="M6 6l12 12"/><path d="M18 6l-12 12"/>
           </svg>
         </button>
+        <button type="button" id="bulk-toggle" class="icon-btn bulk-toggle" title="Bulk select" aria-label="Bulk select" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="4" width="7" height="7" rx="1.5"/>
+            <rect x="13" y="4" width="7" height="7" rx="1.5"/>
+            <rect x="4" y="13" width="7" height="7" rx="1.5"/>
+            <path d="M14 17l2 2 4-4"/>
+          </svg>
+        </button>
+      </div>
+      <div id="bulk-bar" class="bulk-bar glass" hidden>
+        <div class="bulk-bar-head">
+          <button type="button" id="bulk-select-all" class="btn-secondary btn-compact">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="4" y="4" width="16" height="16" rx="3"/>
+              <path d="M8 12l3 3 5-6"/>
+            </svg>
+            <span class="btn-label" id="bulk-select-all-label">Select all</span>
+          </button>
+          <span id="bulk-count" class="bulk-count" aria-live="polite">0 selected</span>
+          <button type="button" id="bulk-cancel" class="icon-btn" title="Exit bulk mode" aria-label="Exit bulk mode">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 6l12 12"/><path d="M18 6l-12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="bulk-bar-row">
+          <label class="field bulk-input">
+            <span class="field-sublabel">Add tags</span>
+            <div class="input-wrap">
+              <input id="bulk-add" type="text" spellcheck="false" autocomplete="off" placeholder="work, banking">
+            </div>
+          </label>
+          <label class="field bulk-input">
+            <span class="field-sublabel">Remove tags</span>
+            <div class="input-wrap">
+              <input id="bulk-remove" type="text" spellcheck="false" autocomplete="off" placeholder="old-tag">
+            </div>
+          </label>
+        </div>
+        <div class="bulk-bar-foot">
+          <p id="bulk-status" class="settings-hint bulk-status" role="status" hidden></p>
+          <button type="button" id="bulk-apply" class="btn-primary btn-compact" disabled>
+            <span class="btn-label">Apply</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12l5 5 9-11"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <p id="search-summary" class="search-summary" aria-live="polite"></p>
       <div id="search-tag-rail" class="tag-rail" role="group" aria-label="Filter by tag" hidden></div>

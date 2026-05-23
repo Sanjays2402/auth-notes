@@ -1342,3 +1342,100 @@ body[data-theme="light"] .codes-index { background: rgba(0, 0, 0, 0.06); }
 .codes-list[data-revealed="false"] .codes-value {
   opacity: 0.78;
 }
+
+/* --- Bulk tag editor (search view) ------------------------------ */
+.bulk-toggle {
+  margin-left: 4px;
+  border-radius: 8px;
+  padding: 4px;
+  opacity: 0.75;
+  transition: opacity var(--dur) var(--ease), background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.bulk-toggle:hover { opacity: 1; }
+.bulk-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  opacity: 1;
+}
+
+.bulk-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 8px 0 4px;
+  border-radius: 14px;
+  animation: fade-rise 200ms var(--ease);
+}
+.bulk-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bulk-bar-head .icon-btn { margin-left: auto; }
+.bulk-count {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.bulk-bar-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.bulk-input { gap: 4px; }
+.bulk-input .field-sublabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.55;
+}
+.bulk-input .input-wrap input {
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.bulk-bar-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.bulk-status { margin: 0; flex: 1; text-align: left; }
+.bulk-status[data-tone="err"] { color: #ff7a7a; }
+.bulk-status[data-tone="ok"] { color: #7ad48a; }
+
+/* Selection-mode affordances on search items */
+.search-results.is-bulk .search-item {
+  padding-left: 36px;
+  cursor: pointer;
+  position: relative;
+}
+.search-results.is-bulk .search-item::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 14px;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.04);
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+body[data-theme="light"] .search-results.is-bulk .search-item::before {
+  border-color: rgba(0,0,0,0.22);
+  background: rgba(0,0,0,0.03);
+}
+.search-results.is-bulk .search-item.is-selected::before {
+  background: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12l5 5 9-11'/></svg>");
+  background-size: 12px 12px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.search-results.is-bulk .search-item.is-selected {
+  border-color: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent-soft) inset;
+}

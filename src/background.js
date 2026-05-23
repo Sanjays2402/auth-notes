@@ -9,6 +9,7 @@ import {
   BACKUP_SCHEMA,
   TAG_PRESETS,
   TWOFA_BACKUPS,
+  applyBulkTags,
   assertAuditEnvelopeSealed,
   assertEnvelopeSealed,
   auditEnvelopes,
@@ -21,6 +22,7 @@ import {
   normalizeAuditEvent,
   normalizeNote,
   normalizeTag,
+  normalizeTags,
   originOf,
   planImport,
   sortNotes,
@@ -496,6 +498,51 @@ handlers["notes:upsert"] = async (msg) => {
   else envelopes.push(envelope);
   await writeEnvelopes(envelopes);
   return record;
+};
+
+/**
+ * Bulk tag editor — apply an add/remove tag set to a list of notes by id.
+ * The vault must be unlocked; each affected note is decrypted, mutated via
+ * {@link applyBulkTags}, then re-sealed under the live key. A single audit
+ * entry summarizes the change so the audit log doesn't flood with per-note
+ * `note:update` events for one user action.
+ */
+handlers["notes:bulkTag"] = async (msg) => {
+  const key = requireUnlocked();
+  const ids = Array.isArray(msg?.ids) ? msg.ids.map((x) => String(x || "")).filter(Boolean) : [];
+  if (ids.length === 0) throw new Error("select at least one note");
+  const addList = normalizeTags(msg?.addTags);
+  const removeList = normalizeTags(msg?.removeTags);
+  if (addList.length === 0 && removeList.length === 0) {
+    throw new Error("no tag changes specified");
+  }
+  const envelopes = await readEnvelopes();
+  const now = Date.now();
+  const idSet = new Set(ids);
+  let changed = 0;
+  let skipped = 0;
+  for (let i = 0; i < envelopes.length; i++) {
+    const env = envelopes[i];
+    if (!idSet.has(env.id)) continue;
+    let note;
+    try { note = await decryptNote(key, env); }
+    catch { skipped++; continue; }
+    const result = applyBulkTags(note, { add: addList, remove: removeList, now });
+    if (!result.changed) continue;
+    envelopes[i] = await encryptNote(key, result.note);
+    changed++;
+  }
+  if (changed > 0) await writeEnvelopes(envelopes);
+  const parts = [];
+  if (addList.length) parts.push(`+${addList.join(",")}`);
+  if (removeList.length) parts.push(`-${removeList.join(",")}`);
+  try {
+    await recordAuditEvent({
+      type: "note:update",
+      detail: `bulk ${parts.join(" ")} \u2022 ${changed}/${ids.length} notes`,
+    });
+  } catch (err) { console.warn("[auth-notes] audit bulkTag failed", err); }
+  return { requested: ids.length, changed, skipped, added: addList, removed: removeList };
 };
 
 handlers["notes:delete"] = async (msg) => {

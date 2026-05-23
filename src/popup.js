@@ -623,6 +623,12 @@ function renderSearchResults(payload, query) {
 
   const results = Array.isArray(payload?.results) ? payload.results : [];
   list.innerHTML = "";
+  searchVisibleIds = results.map((r) => r?.note?.id).filter(Boolean);
+  if (bulkSelected.size > 0) {
+    const visible = new Set(searchVisibleIds);
+    for (const id of [...bulkSelected]) if (!visible.has(id)) bulkSelected.delete(id);
+    updateBulkBarUI();
+  }
 
   if (results.length === 0) {
     empty.hidden = false;
@@ -649,6 +655,7 @@ function renderSearchResults(payload, query) {
     li.className = "search-item glass";
     li.setAttribute("role", "option");
     li.dataset.id = note.id || "";
+    if (bulkSelected.has(note.id)) li.classList.add("is-selected");
     const label = note.label || displayOrigin(note.origin);
     const origin = displayOrigin(note.origin);
     const auth = prettyAuth(note.authMethod);
@@ -677,6 +684,7 @@ function renderSearchResults(payload, query) {
     frag.appendChild(li);
   }
   list.appendChild(frag);
+  applyBulkModeToList();
 }
 
 async function runSearch(query) {
@@ -759,6 +767,150 @@ async function refreshTagRail() {
       runSearch(input.value);
     });
   }
+}
+
+// --- Bulk tag editor -------------------------------------------------
+
+let bulkMode = false;
+const bulkSelected = new Set();
+let searchVisibleIds = [];
+
+function setBulkStatus(text, tone) {
+  const el = document.getElementById("bulk-status");
+  if (!el) return;
+  if (!text) { el.hidden = true; el.textContent = ""; el.removeAttribute("data-tone"); return; }
+  el.textContent = text;
+  el.hidden = false;
+  if (tone) el.dataset.tone = tone; else el.removeAttribute("data-tone");
+}
+
+function parseTagsInput(value) {
+  return String(value || "")
+    .split(/[\s,]+/)
+    .map((t) => t.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9._-]+/g, ""))
+    .filter(Boolean);
+}
+
+function updateBulkBarUI() {
+  const count = document.getElementById("bulk-count");
+  const apply = document.getElementById("bulk-apply");
+  const selAll = document.getElementById("bulk-select-all");
+  const selAllLabel = document.getElementById("bulk-select-all-label");
+  const addEl = document.getElementById("bulk-add");
+  const remEl = document.getElementById("bulk-remove");
+  const n = bulkSelected.size;
+  if (count) count.textContent = `${n} selected`;
+  const adds = addEl ? parseTagsInput(addEl.value) : [];
+  const removes = remEl ? parseTagsInput(remEl.value) : [];
+  if (apply) apply.disabled = n === 0 || (adds.length === 0 && removes.length === 0);
+  if (selAllLabel) {
+    const visible = searchVisibleIds.length;
+    const allSelected = visible > 0 && bulkSelected.size === visible &&
+      searchVisibleIds.every((id) => bulkSelected.has(id));
+    selAllLabel.textContent = allSelected ? "Clear" : "Select all";
+  }
+  if (selAll) selAll.disabled = searchVisibleIds.length === 0;
+}
+
+function applyBulkModeToList() {
+  const list = document.getElementById("search-results");
+  if (!list) return;
+  list.classList.toggle("is-bulk", bulkMode);
+  for (const li of list.querySelectorAll(".search-item")) {
+    const id = li.dataset.id;
+    li.classList.toggle("is-selected", bulkMode && bulkSelected.has(id));
+  }
+}
+
+function setBulkMode(on) {
+  bulkMode = !!on;
+  const bar = document.getElementById("bulk-bar");
+  const toggle = document.getElementById("bulk-toggle");
+  if (bar) bar.hidden = !bulkMode;
+  if (toggle) toggle.setAttribute("aria-pressed", bulkMode ? "true" : "false");
+  if (!bulkMode) bulkSelected.clear();
+  setBulkStatus("");
+  applyBulkModeToList();
+  updateBulkBarUI();
+}
+
+function toggleBulkSelection(id) {
+  if (!id) return;
+  if (bulkSelected.has(id)) bulkSelected.delete(id);
+  else bulkSelected.add(id);
+  applyBulkModeToList();
+  updateBulkBarUI();
+}
+
+function bindBulkEditor() {
+  const toggle = document.getElementById("bulk-toggle");
+  toggle?.addEventListener("click", () => {
+    toggle.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.92)" }, { transform: "scale(1)" }],
+      { duration: 200, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    setBulkMode(!bulkMode);
+  });
+  document.getElementById("bulk-cancel")?.addEventListener("click", () => setBulkMode(false));
+
+  const list = document.getElementById("search-results");
+  list?.addEventListener("click", (e) => {
+    if (!bulkMode) return;
+    const li = e.target.closest(".search-item");
+    if (!li) return;
+    e.preventDefault();
+    toggleBulkSelection(li.dataset.id);
+  });
+
+  const selAll = document.getElementById("bulk-select-all");
+  selAll?.addEventListener("click", () => {
+    const allSelected = searchVisibleIds.length > 0 &&
+      searchVisibleIds.every((id) => bulkSelected.has(id));
+    if (allSelected) bulkSelected.clear();
+    else for (const id of searchVisibleIds) bulkSelected.add(id);
+    applyBulkModeToList();
+    updateBulkBarUI();
+  });
+
+  const addEl = document.getElementById("bulk-add");
+  const remEl = document.getElementById("bulk-remove");
+  addEl?.addEventListener("input", updateBulkBarUI);
+  remEl?.addEventListener("input", updateBulkBarUI);
+
+  const apply = document.getElementById("bulk-apply");
+  apply?.addEventListener("click", async () => {
+    const ids = [...bulkSelected];
+    const addTags = parseTagsInput(addEl?.value || "");
+    const removeTags = parseTagsInput(remEl?.value || "");
+    if (ids.length === 0) { setBulkStatus("Select notes first.", "err"); return; }
+    if (addTags.length === 0 && removeTags.length === 0) {
+      setBulkStatus("Add or remove at least one tag.", "err"); return;
+    }
+    apply.disabled = true;
+    apply.classList.add("is-busy");
+    setBulkStatus("Applying\u2026");
+    try {
+      const res = await send("notes:bulkTag", { ids, addTags, removeTags });
+      const parts = [];
+      if (res.added?.length) parts.push(`+${res.added.join(", ")}`);
+      if (res.removed?.length) parts.push(`-${res.removed.join(", ")}`);
+      setBulkStatus(`Updated ${res.changed}/${res.requested} \u2014 ${parts.join(" \u2022 ")}`, "ok");
+      if (addEl) addEl.value = "";
+      if (remEl) remEl.value = "";
+      bulkSelected.clear();
+      refreshTagRail();
+      const input = document.getElementById("search-input");
+      runSearch(input?.value || "");
+      clearTimeout(bindBulkEditor._t);
+      bindBulkEditor._t = setTimeout(() => setBulkStatus(""), 2600);
+    } catch (err) {
+      console.warn("[auth-notes] bulkTag failed", err);
+      setBulkStatus(`Failed: ${err?.message || err}`, "err");
+    } finally {
+      apply.classList.remove("is-busy");
+      updateBulkBarUI();
+    }
+  });
 }
 
 function bindSearch() {
@@ -1322,6 +1474,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindUnlockForm();
   bindSettings();
   bindSearch();
+  bindBulkEditor();
   bindQuickAdd();
 
   const lockBtn = document.getElementById("lock-btn");

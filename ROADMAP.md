@@ -20,7 +20,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Password strength hints recorded per site (length, complexity bucket)
 - [x] Recovery codes vault section with masked reveal
 - [x] Per-note last-used date + auto-sort by recency
-- [ ] Bulk tag editor with multi-select
+- [x] Bulk tag editor with multi-select
 - [ ] Keyboard shortcut to open popup on current tab
 - [ ] Favicon thumbnail next to each site entry
 - [ ] Settings page (options.html) for idle timeout, theme, PBKDF2 iterations

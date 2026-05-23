@@ -442,4 +442,33 @@ if (!themeBgSrc.includes("VALID_THEMES") || !themeBgSrc.includes("theme: DEFAULT
   console.error("theme handling missing from background.js"); process.exit(1);
 }
 
+// --- Bulk tag editor (multi-select) ---
+const notesMod = await import("../src/notes.js");
+if (typeof notesMod.applyBulkTags !== "function") {
+  console.error("applyBulkTags missing from notes.js"); process.exit(1);
+}
+const bulkBase = notesMod.normalizeNote({ label: "Acme", origin: "https://acme.test", tags: ["work", "infra"] });
+const added = notesMod.applyBulkTags(bulkBase, { add: ["BANKING", "work"], remove: ["infra"], now: bulkBase.updatedAt + 1000 });
+if (!added.changed) { console.error("bulk tags should report change"); process.exit(1); }
+if (!added.note.tags.includes("banking") || !added.note.tags.includes("work") || added.note.tags.includes("infra")) {
+  console.error("bulk tags add/remove wrong:", added.note.tags); process.exit(1);
+}
+const noop = notesMod.applyBulkTags(added.note, { add: ["work"], remove: ["missing"] });
+if (noop.changed) { console.error("bulk tags no-op should not change"); process.exit(1); }
+if (!themeBgSrc.includes('handlers["notes:bulkTag"]')) {
+  console.error("notes:bulkTag handler missing"); process.exit(1);
+}
+const bulkPopupHtml = fs.readFileSync("src/popup.html", "utf8");
+if (!bulkPopupHtml.includes("id=\"bulk-bar\"") || !bulkPopupHtml.includes("id=\"bulk-toggle\"")) {
+  console.error("bulk editor UI missing from popup.html"); process.exit(1);
+}
+const bulkPopupJs = fs.readFileSync("src/popup.js", "utf8");
+if (!bulkPopupJs.includes("notes:bulkTag") || !bulkPopupJs.includes("bindBulkEditor")) {
+  console.error("bulk editor wiring missing from popup.js"); process.exit(1);
+}
+const bulkPopupCss = fs.readFileSync("src/popup.css", "utf8");
+if (!bulkPopupCss.includes(".bulk-bar") || !bulkPopupCss.includes(".is-bulk")) {
+  console.error("bulk editor CSS missing"); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");

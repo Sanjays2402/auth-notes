@@ -287,6 +287,33 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
   return record;
 }
 
+/** Apply a bulk tag mutation to a note: returns a new note with `add` tags
+ *  unioned in (preserving existing order) and `remove` tags filtered out.
+ *  Tag inputs are normalized via {@link normalizeTags}. The total tag count is
+ *  capped at {@link TAG_MAX_COUNT}; overflow is dropped silently. The result
+ *  bumps `updatedAt` to `now` because the note's payload changed. */
+export function applyBulkTags(note, { add = [], remove = [], now = Date.now() } = {}) {
+  if (!note || typeof note !== "object") throw new Error("note required");
+  const current = Array.isArray(note.tags) ? note.tags : [];
+  const addList = normalizeTags(add);
+  const removeSet = new Set(normalizeTags(remove));
+  const seen = new Set();
+  const next = [];
+  const push = (tag) => {
+    const t = normalizeTag(tag);
+    if (!t || removeSet.has(t) || seen.has(t)) return;
+    seen.add(t);
+    next.push(t);
+  };
+  for (const t of current) push(t);
+  for (const t of addList) push(t);
+  const capped = next.slice(0, TAG_MAX_COUNT);
+  const changed =
+    capped.length !== current.length ||
+    capped.some((t, i) => t !== current[i]);
+  return { note: { ...note, tags: capped, updatedAt: changed ? now : (note.updatedAt || now) }, changed };
+}
+
 /** Bump a note's `lastUsedAt` to `now` without mutating other fields. Returns
  *  a fresh record so callers can re-encrypt without aliasing surprises. The
  *  caller is responsible for re-sealing the result; this never touches
