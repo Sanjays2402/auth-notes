@@ -172,6 +172,7 @@ function bindSettings() {
   });
 
   bindExport();
+  bindImport();
 
   const select = document.getElementById("idle-select");
   const summary = document.getElementById("idle-summary");
@@ -245,6 +246,133 @@ function bindExport() {
     } finally {
       btn.disabled = false;
       btn.classList.remove("is-busy");
+    }
+  });
+}
+
+// --- Encrypted backup import ----------------------------------------
+
+const IMPORT_MAX_BYTES = 8 * 1024 * 1024;
+let pendingImportContent = null;
+
+function setImportStatus(text, tone) {
+  const el = document.getElementById("import-status");
+  if (!el) return;
+  if (!text) { el.hidden = true; el.textContent = ""; el.removeAttribute("data-tone"); return; }
+  el.textContent = text;
+  el.hidden = false;
+  if (tone) el.dataset.tone = tone; else el.removeAttribute("data-tone");
+}
+
+function resetImportUI({ keepStatus = false } = {}) {
+  pendingImportContent = null;
+  const name = document.getElementById("import-file-name");
+  const pwField = document.getElementById("import-pw-field");
+  const actions = document.getElementById("import-actions");
+  const pw = document.getElementById("import-pw");
+  const file = document.getElementById("import-file");
+  if (name) { name.hidden = true; name.textContent = ""; }
+  if (pwField) pwField.hidden = true;
+  if (actions) actions.hidden = true;
+  if (pw) pw.value = "";
+  if (file) file.value = "";
+  if (!keepStatus) setImportStatus("");
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error("read failed"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsText(file);
+  });
+}
+
+function bindImport() {
+  const trigger = document.getElementById("import-btn");
+  const file = document.getElementById("import-file");
+  const nameEl = document.getElementById("import-file-name");
+  const pwField = document.getElementById("import-pw-field");
+  const actions = document.getElementById("import-actions");
+  const runBtn = document.getElementById("import-run");
+  const pwInput = document.getElementById("import-pw");
+  if (!trigger || !file || !runBtn) return;
+
+  trigger.addEventListener("click", () => {
+    trigger.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }, { transform: "scale(1)" }],
+      { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    file.click();
+  });
+
+  file.addEventListener("change", async () => {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    if (f.size > IMPORT_MAX_BYTES) {
+      setImportStatus("Backup file is too large.", "err");
+      resetImportUI({ keepStatus: true });
+      return;
+    }
+    try {
+      pendingImportContent = await readFileAsText(f);
+      if (nameEl) { nameEl.hidden = false; nameEl.textContent = f.name; }
+      if (pwField) pwField.hidden = false;
+      if (actions) actions.hidden = false;
+      setImportStatus("Enter the password used when this backup was created.");
+      setTimeout(() => pwInput?.focus(), 30);
+    } catch (err) {
+      console.warn("[auth-notes] read import failed", err);
+      setImportStatus(`Couldn't read file: ${err?.message || err}`, "err");
+      resetImportUI({ keepStatus: true });
+    }
+  });
+
+  pwInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); runBtn.click(); }
+  });
+
+  runBtn.addEventListener("click", async () => {
+    if (!pendingImportContent) {
+      setImportStatus("Choose a backup file first.", "err");
+      return;
+    }
+    const pw = pwInput?.value || "";
+    if (!pw) {
+      setImportStatus("Enter the backup's master password.", "err");
+      pwInput?.focus();
+      return;
+    }
+    const mode = document.querySelector('input[name="import-mode"]:checked')?.value || "merge";
+    runBtn.disabled = true;
+    runBtn.classList.add("is-busy");
+    setImportStatus("Restoring\u2026");
+    try {
+      const res = await send("backup:import", {
+        content: pendingImportContent,
+        password: pw,
+        mode,
+      });
+      const parts = [];
+      if (res.added) parts.push(`${res.added} added`);
+      if (res.replaced) parts.push(`${res.replaced} updated`);
+      if (res.discarded) parts.push(`${res.discarded} discarded`);
+      if (res.failed) parts.push(`${res.failed} skipped`);
+      const summary = parts.length ? parts.join(" \u2022 ") : "nothing to do";
+      setImportStatus(`Restored \u2014 ${summary}.`, "ok");
+      resetImportUI({ keepStatus: true });
+      await refreshCurrentSite();
+    } catch (err) {
+      console.warn("[auth-notes] import failed", err);
+      const msg = String(err?.message || err);
+      const friendly = /wrong password/i.test(msg) ? "Wrong password for this backup." : msg;
+      setImportStatus(friendly, "err");
+      if (/wrong password/i.test(msg)) {
+        if (pwInput) { pwInput.select?.(); pwInput.focus(); }
+      }
+    } finally {
+      runBtn.disabled = false;
+      runBtn.classList.remove("is-busy");
     }
   });
 }

@@ -179,4 +179,85 @@ if (restoredNote.email !== "me@example.com") {
   console.error("export round-trip decrypt failed"); process.exit(1);
 }
 
+// --- Encrypted backup import ----------------------------------------
+for (const needle of ["backup:import", "decodeBackupContent", "planImport"]) {
+  if (!bgSrc.includes(needle)) { console.error("background.js missing", needle); process.exit(1); }
+}
+for (const needle of ["import-btn", "import-file", "import-pw", "import-run", "import-actions"]) {
+  if (!popupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+for (const needle of ["backup:import", "bindImport", "pendingImportContent"]) {
+  if (!popupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+
+// Bad payloads must be rejected by the decoder.
+const rejects = [
+  ["empty", ""],
+  ["non-json", "not json at all"],
+  ["wrong format", JSON.stringify({ format: "other", schema: 1, auth: {}, envelopes: [] })],
+  ["wrong schema", JSON.stringify({ format: "auth-notes-backup", schema: 999, auth: { salt: "x", verifier: {} }, envelopes: [] })],
+  ["no auth", JSON.stringify({ format: "auth-notes-backup", schema: 1, envelopes: [] })],
+  ["no envelopes", JSON.stringify({ format: "auth-notes-backup", schema: 1, auth: { salt: "x", verifier: { iv: "i", ct: "c" } } })],
+  ["leaked envelope", JSON.stringify({
+    format: "auth-notes-backup", schema: 1,
+    auth: { salt: "x", verifier: { iv: "i", ct: "c" } },
+    envelopes: [{ id: "a", origin: "b", iv: "c", ct: "d", email: "leak" }],
+  })],
+];
+for (const [name, body] of rejects) {
+  let threw = false;
+  try { notes.decodeBackupContent(body); }
+  catch { threw = true; }
+  if (!threw) { console.error("decodeBackupContent should reject:", name); process.exit(1); }
+}
+
+// Happy path: the exporter's JSON we built above must decode cleanly.
+const decoded = notes.decodeBackupContent(exportJson);
+if (decoded.format !== "auth-notes-backup" || decoded.envelopes.length !== 1) {
+  console.error("decodeBackupContent failed on valid payload"); process.exit(1);
+}
+if (notes.BACKUP_FORMAT !== "auth-notes-backup" || notes.BACKUP_SCHEMA !== 1) {
+  console.error("BACKUP_FORMAT/SCHEMA constants drifted"); process.exit(1);
+}
+
+// planImport: merge updates by id, replace discards existing.
+const existingEnv = [
+  { id: "a", origin: "x", iv: "1", ct: "1" },
+  { id: "b", origin: "y", iv: "2", ct: "2" },
+];
+const incomingEnv = [
+  { id: "b", origin: "y", iv: "3", ct: "3" }, // replaces a known id
+  { id: "c", origin: "z", iv: "4", ct: "4" }, // brand new
+];
+const merge = notes.planImport(existingEnv, incomingEnv, "merge");
+if (merge.added !== 1 || merge.replaced !== 1 || merge.discarded !== 0) {
+  console.error("planImport merge wrong", merge); process.exit(1);
+}
+const replace = notes.planImport(existingEnv, incomingEnv, "replace");
+if (replace.added !== 2 || replace.replaced !== 0 || replace.discarded !== 2) {
+  console.error("planImport replace wrong", replace); process.exit(1);
+}
+let badModeThrew = false;
+try { notes.planImport(existingEnv, incomingEnv, "bogus"); }
+catch { badModeThrew = true; }
+if (!badModeThrew) { console.error("planImport should reject unknown mode"); process.exit(1); }
+
+// Full re-encrypt round-trip: a backup created with one password can be
+// decrypted with that password's key and re-encrypted under a different one.
+const altPassword = "different-master-password";
+const { record: altRecord, key: altKey } = await mod.buildSetupRecord(altPassword);
+const backupKey = await mod.verifyPassword(password, decoded.auth);
+const decryptedFromBackup = await notes.decryptNote(backupKey, decoded.envelopes[0]);
+const renormalized = notes.normalizeNote({
+  ...decryptedFromBackup,
+  createdAt: decryptedFromBackup.createdAt,
+}, { now: decryptedFromBackup.updatedAt });
+const resealed = await notes.encryptNote(altKey, renormalized);
+notes.assertEnvelopeSealed(resealed);
+const final = await notes.decryptNote(altKey, resealed);
+if (final.email !== "me@example.com" || final.id !== decryptedFromBackup.id) {
+  console.error("import re-encrypt round-trip failed"); process.exit(1);
+}
+void altRecord;
+
 console.log("\u2713 smoke ok");

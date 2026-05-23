@@ -185,6 +185,79 @@ export function auditEnvelopes(envelopes) {
   return { total: list.length, leaks, sealed: list.length - leaks.length };
 }
 
+/** Backup file constants. Must match the exporter in background.js. */
+export const BACKUP_FORMAT = "auth-notes-backup";
+export const BACKUP_SCHEMA = 1;
+const BACKUP_MAX_BYTES = 8 * 1024 * 1024; // 8 MiB sanity cap
+
+/**
+ * Parse and validate a backup file's textual contents. Returns the parsed
+ * payload, or throws a descriptive Error if the file is unrecognized.
+ * This intentionally does NO crypto — call {@link verifyPassword} with
+ * the returned `auth` record to obtain the backup's derived key.
+ */
+export function decodeBackupContent(content) {
+  if (typeof content !== "string" || content.length === 0) {
+    throw new Error("backup file is empty");
+  }
+  if (content.length > BACKUP_MAX_BYTES) {
+    throw new Error("backup file is too large");
+  }
+  let payload;
+  try { payload = JSON.parse(content); }
+  catch { throw new Error("backup file is not valid JSON"); }
+  if (!payload || typeof payload !== "object") {
+    throw new Error("backup payload malformed");
+  }
+  if (payload.format !== BACKUP_FORMAT) {
+    throw new Error("not an Auth Notes backup file");
+  }
+  if (payload.schema !== BACKUP_SCHEMA) {
+    throw new Error(`unsupported backup schema: ${payload.schema}`);
+  }
+  if (!payload.auth || typeof payload.auth !== "object" ||
+      typeof payload.auth.salt !== "string" ||
+      !payload.auth.verifier || typeof payload.auth.verifier !== "object") {
+    throw new Error("backup is missing its auth record");
+  }
+  if (!Array.isArray(payload.envelopes)) {
+    throw new Error("backup is missing its envelopes");
+  }
+  // Sealed-at-rest invariant: a legitimate export never carries plaintext.
+  for (const env of payload.envelopes) assertEnvelopeSealed(env);
+  return payload;
+}
+
+/**
+ * Plan an import: given the existing envelopes and the backup's envelopes,
+ * decide which incoming entries replace existing ones (by id) and which are
+ * appended. In `replace` mode the existing set is discarded entirely.
+ * Returns counts only — the caller is responsible for the actual re-encrypt
+ * step because keys must never leave the service worker boundary.
+ */
+export function planImport(existing, incoming, mode = "merge") {
+  const cur = Array.isArray(existing) ? existing : [];
+  const inc = Array.isArray(incoming) ? incoming : [];
+  if (mode !== "merge" && mode !== "replace") {
+    throw new Error(`unknown import mode: ${mode}`);
+  }
+  const existingIds = new Set(cur.map((e) => e && e.id).filter(Boolean));
+  let replaced = 0;
+  let added = 0;
+  for (const env of inc) {
+    if (!env || typeof env.id !== "string") continue;
+    if (mode === "merge" && existingIds.has(env.id)) replaced++;
+    else added++;
+  }
+  return {
+    mode,
+    total: inc.length,
+    added,
+    replaced,
+    discarded: mode === "replace" ? cur.length : 0,
+  };
+}
+
 /** Sort a list of decrypted notes by updatedAt desc, then label asc. */
 export function sortNotes(list) {
   return [...list].sort((a, b) => {

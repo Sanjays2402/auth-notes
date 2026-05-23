@@ -316,6 +316,56 @@
           <p class="settings-hint" id="export-status" role="status" hidden></p>
         </div>
       </div>
+      <div class="glass settings-card">
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <span class="settings-row-title">Restore from backup</span>
+            <span class="settings-row-sub">Load a <code>.json.enc</code> file you exported earlier. You&rsquo;ll need the master password it was sealed with.</span>
+          </div>
+        </div>
+        <div class="settings-control">
+          <div class="import-row">
+            <button type="button" id="import-btn" class="btn-secondary">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 20V8"/><path d="M7 13l5-5 5 5"/><path d="M5 4h14"/>
+              </svg>
+              <span class="btn-label">Choose backup file</span>
+            </button>
+            <input id="import-file" type="file" accept=".enc,.json,application/json,application/octet-stream" hidden>
+          </div>
+          <p id="import-file-name" class="import-file-name" hidden></p>
+          <label class="field" id="import-pw-field" hidden>
+            <span class="field-label">Master password for that backup</span>
+            <div class="input-wrap">
+              <input id="import-pw" type="password" autocomplete="off" spellcheck="false" placeholder="Password used at export time">
+              <button type="button" class="input-toggle" data-target="import-pw" aria-label="Show password">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+          </label>
+          <div class="import-actions" id="import-actions" hidden>
+            <label class="import-mode">
+              <input type="radio" name="import-mode" value="merge" checked>
+              <span>Merge into vault</span>
+            </label>
+            <label class="import-mode">
+              <input type="radio" name="import-mode" value="replace">
+              <span>Replace vault</span>
+            </label>
+            <button type="button" id="import-run" class="btn-primary btn-compact">
+              <span class="btn-label">Restore</span>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>
+              </svg>
+            </button>
+          </div>
+          <p class="settings-hint" id="import-status" role="status" hidden></p>
+        </div>
+      </div>
+
     </section>
 
   </main>

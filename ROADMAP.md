@@ -11,7 +11,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Auto-lock after N minutes idle
 - [x] Search across all sites
 - [x] Export encrypted backup (.json.enc)
-- [ ] Import encrypted backup
+- [x] Import encrypted backup
 - [ ] Tag system (work, personal, banking, etc.)
 - [ ] Quick-add from popup with current URL prefilled
 - [ ] Audit log of access events (encrypted)

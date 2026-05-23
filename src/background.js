@@ -4,13 +4,17 @@
 import { buildSetupRecord, verifyPassword } from "./crypto.js";
 import {
   AUTH_METHODS,
+  BACKUP_FORMAT,
+  BACKUP_SCHEMA,
   TWOFA_BACKUPS,
   assertEnvelopeSealed,
   auditEnvelopes,
+  decodeBackupContent,
   decryptNote,
   encryptNote,
   normalizeNote,
   originOf,
+  planImport,
   sortNotes,
 } from "./notes.js";
 
@@ -20,9 +24,8 @@ const STORAGE_KEY_AUTH = "an:auth";
 const STORAGE_KEY_NOTES = "an:notes";
 const STORAGE_KEY_SETTINGS = "an:settings";
 
-// Backup file format identifier — bumped only on breaking layout changes.
-const BACKUP_FORMAT = "auth-notes-backup";
-const BACKUP_SCHEMA = 1;
+// Backup file format identifier sourced from notes.js so importer + exporter
+// agree on the layout.
 
 // Auto-lock
 const ALARM_AUTO_LOCK = "an:auto-lock-check";
@@ -251,6 +254,62 @@ handlers["backup:export"] = async () => {
     content: json,
     count: envelopes.length,
     exportedAt: payload.exportedAt,
+  };
+};
+
+handlers["backup:import"] = async (msg) => {
+  const currentKey = requireUnlocked();
+  const content = typeof msg?.content === "string" ? msg.content : "";
+  const password = typeof msg?.password === "string" ? msg.password : "";
+  const mode = msg?.mode === "replace" ? "replace" : "merge";
+  if (!password) throw new Error("backup password is required");
+  const payload = decodeBackupContent(content);
+  // Derive the backup's key from its own auth record. The current vault's
+  // master password is intentionally not used here — backups may have been
+  // taken under a different password.
+  let backupKey;
+  try { backupKey = await verifyPassword(password, payload.auth); }
+  catch { throw new Error("wrong password for this backup"); }
+
+  const existing = await readEnvelopes();
+  const plan = planImport(existing, payload.envelopes, mode);
+
+  // Decrypt each incoming envelope with the backup key, then re-encrypt with
+  // the vault's currently unlocked key. This is what makes a backup taken
+  // under a different password merge cleanly into the live vault.
+  const reencrypted = [];
+  let failed = 0;
+  for (const env of payload.envelopes) {
+    try {
+      const note = await decryptNote(backupKey, env);
+      const normalized = normalizeNote({
+        ...note,
+        createdAt: Number.isFinite(note.createdAt) ? note.createdAt : undefined,
+      }, { now: Number.isFinite(note.updatedAt) ? note.updatedAt : Date.now() });
+      reencrypted.push(await encryptNote(currentKey, normalized));
+    } catch (err) {
+      console.warn("[auth-notes] skipping unreadable backup entry", env?.id, err);
+      failed++;
+    }
+  }
+
+  let next;
+  if (mode === "replace") {
+    next = reencrypted;
+  } else {
+    const byId = new Map(existing.map((e) => [e.id, e]));
+    for (const env of reencrypted) byId.set(env.id, env);
+    next = [...byId.values()];
+  }
+  await writeEnvelopes(next);
+  return {
+    mode,
+    total: plan.total,
+    added: plan.added,
+    replaced: plan.replaced,
+    discarded: plan.discarded,
+    failed,
+    finalCount: next.length,
   };
 };
 
