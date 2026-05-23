@@ -894,6 +894,53 @@ function bindStats() {
   back?.addEventListener("click", () => openSettings());
 }
 
+function renderVaultHealth(health) {
+  const card = document.getElementById("stats-health");
+  if (!card) return;
+  if (!health || !Number.isFinite(Number(health.score))) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const score = Math.max(0, Math.min(100, Math.round(Number(health.score) || 0)));
+  const grade = String(health.grade || "—");
+  const scoreEl = document.getElementById("stats-health-score");
+  const gradeEl = document.getElementById("stats-health-grade");
+  const ringEl = document.getElementById("stats-health-ring-fill");
+  if (scoreEl) scoreEl.textContent = String(score);
+  if (gradeEl) gradeEl.textContent = grade;
+  if (ringEl) ringEl.setAttribute("stroke-dasharray", `${score} ${100 - score}`);
+  card.setAttribute("data-grade-tier", score >= 80 ? "good" : score >= 60 ? "okay" : "weak");
+  const list = document.getElementById("stats-health-signals");
+  if (list) {
+    const signals = Array.isArray(health.signals) ? health.signals : [];
+    list.innerHTML = signals.map((sig) => {
+      const appl = Number(sig.applicable) || 0;
+      const sScore = Math.max(0, Math.min(100, Number(sig.score) || 0));
+      const tier = appl === 0 ? "na" : sScore >= 80 ? "good" : sScore >= 60 ? "okay" : "weak";
+      const valueText = appl === 0 ? "n/a" : `${sScore}%`;
+      return `
+        <li class="stats-health-signal" data-tier="${escapeHtml(tier)}">
+          <div class="stats-health-signal-head">
+            <span class="stats-health-signal-label">${escapeHtml(sig.label || sig.id || "")}</span>
+            <span class="stats-health-signal-weight">w${escapeHtml(String(sig.weight || 0))}</span>
+            <span class="stats-health-signal-value">${escapeHtml(valueText)}</span>
+          </div>
+          <div class="stats-health-signal-track" aria-hidden="true"><span class="stats-health-signal-fill" style="width:${sScore}%"></span></div>
+          <p class="stats-health-signal-detail">${escapeHtml(sig.detail || "")}</p>
+        </li>
+      `;
+    }).join("");
+  }
+  const sub = document.getElementById("stats-health-sub");
+  if (sub) {
+    const weak = (health.signals || []).filter((s) => (Number(s.applicable) || 0) > 0 && (Number(s.score) || 0) < 60);
+    sub.textContent = weak.length === 0
+      ? "Weighted across 2FA, recovery codes, unique emails, passkey adoption, password strength, and freshness."
+      : `${weak.length} signal${weak.length === 1 ? "" : "s"} below 60% — tap a row above to see why.`;
+  }
+}
+
 async function openStats() {
   show("view-stats");
   await renderStats();
@@ -937,6 +984,7 @@ async function renderStats() {
   }
   summary.textContent = `${total} note${total === 1 ? "" : "s"} sealed in your vault`;
   body.hidden = false;
+  renderVaultHealth(stats?.health);
 
   document.getElementById("stats-total").textContent = String(total);
   document.getElementById("stats-2fa-pct").textContent = `${stats.twofa.coveragePct}%`;

@@ -2627,3 +2627,142 @@ body[data-theme="light"] .history-change { color: rgba(20, 24, 36, 0.78); }
 body[data-theme="light"] .history-field { color: rgba(20, 24, 36, 0.92); }
 body[data-theme="light"] .history-from, body[data-theme="light"] .history-to { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.06); }
 body[data-theme="light"] .history-from { color: rgba(20, 24, 36, 0.5); }
+
+/* ---------- Vault health card ---------------------------------- */
+.stats-health {
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+.stats-health::before {
+  content: "";
+  position: absolute;
+  inset: -40% -20% auto auto;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--accent) 28%, transparent), transparent 70%);
+  filter: blur(36px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.stats-health-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+}
+.stats-health-meter {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
+}
+.stats-health-ring-track {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+body[data-theme="light"] .stats-health-ring-track { stroke: rgba(0, 0, 0, 0.08); }
+.stats-health-ring-fill {
+  stroke: var(--accent);
+  transition: stroke-dasharray 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.stats-health[data-grade-tier="okay"] .stats-health-ring-fill { stroke: #f1c44b; }
+.stats-health[data-grade-tier="weak"] .stats-health-ring-fill { stroke: #ef6f6c; }
+.stats-health-grade {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.stats-health-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.stats-health-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.stats-health-score span {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.55;
+}
+.stats-health-signals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  position: relative;
+}
+.stats-health-signal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+body[data-theme="light"] .stats-health-signal {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+.stats-health-signal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.stats-health-signal-label { font-weight: 500; letter-spacing: -0.005em; }
+.stats-health-signal-weight {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 0.7;
+}
+body[data-theme="light"] .stats-health-signal-weight { background: rgba(0, 0, 0, 0.06); }
+.stats-health-signal-value {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.stats-health-signal-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+body[data-theme="light"] .stats-health-signal-track { background: rgba(0, 0, 0, 0.07); }
+.stats-health-signal-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.stats-health-signal[data-tier="okay"] .stats-health-signal-fill { background: #f1c44b; }
+.stats-health-signal[data-tier="weak"] .stats-health-signal-fill { background: #ef6f6c; }
+.stats-health-signal[data-tier="na"] .stats-health-signal-fill { background: rgba(255, 255, 255, 0.12); }
+.stats-health-signal-detail {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.65;
+  line-height: 1.4;
+}

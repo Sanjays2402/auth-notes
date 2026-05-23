@@ -984,6 +984,201 @@ export function computeVaultStats(notes) {
 }
 
 /**
+ * Vault Health Score — weighted security signals rolled into a single 0–100
+ * read on the vault's hygiene.
+ *
+ * Pure function. Takes the same `notes` list `computeVaultStats` does
+ * (decrypted, active — trashed notes already filtered upstream). Returns
+ *
+ *   {
+ *     score: 0..100,            // weighted, signal-applicable aware
+ *     grade: 'A+'..'F',
+ *     total: notes.length,
+ *     signals: [
+ *       { id, label, weight, score, detail, applicable, total }
+ *     ],
+ *   }
+ *
+ * Signals (drop out of the denominator when `applicable === 0`):
+ *  - twofa            (w 25): share of notes with a 2FA factor (passkey OR backup != none).
+ *  - recoveryCodes    (w 20): share of 2FA notes that have at least one recovery code.
+ *  - uniqueEmail      (w 20): share of email-bearing notes whose email isn't reused anywhere else.
+ *  - passkey          (w 15): share of notes using a passkey (strongest auth signal).
+ *  - passwordStrength (w 10): share of `password`-auth notes whose recorded hint bucket is good or strong.
+ *  - freshness        (w 10): share of notes touched within the last 365 days.
+ *
+ * Score is `Σ(weight * signalScore) / Σ(weight where applicable)`, all on
+ * 0..100. Empty vaults score 0 with `grade: '—'`. Each signal score is
+ * itself a 0..100 share for readable per-row bars in the dashboard.
+ */
+export const VAULT_HEALTH_SIGNALS = Object.freeze([
+  { id: "twofa", label: "2FA coverage", weight: 25 },
+  { id: "recoveryCodes", label: "Recovery codes saved", weight: 20 },
+  { id: "uniqueEmail", label: "Unique emails", weight: 20 },
+  { id: "passkey", label: "Passkey adoption", weight: 15 },
+  { id: "passwordStrength", label: "Strong passwords", weight: 10 },
+  { id: "freshness", label: "Recently reviewed", weight: 10 },
+]);
+
+export const VAULT_HEALTH_FRESHNESS_MS = 365 * 24 * 60 * 60 * 1000;
+
+function gradeForScore(score) {
+  if (!Number.isFinite(score)) return "—";
+  if (score >= 95) return "A+";
+  if (score >= 90) return "A";
+  if (score >= 85) return "A-";
+  if (score >= 80) return "B+";
+  if (score >= 75) return "B";
+  if (score >= 70) return "B-";
+  if (score >= 65) return "C+";
+  if (score >= 60) return "C";
+  if (score >= 55) return "C-";
+  if (score >= 50) return "D";
+  return "F";
+}
+
+export function computeVaultHealth(notes, { now = Date.now() } = {}) {
+  const list = Array.isArray(notes) ? notes.filter((n) => n && typeof n === "object") : [];
+  const total = list.length;
+  if (total === 0) {
+    return {
+      score: 0,
+      grade: "—",
+      total: 0,
+      signals: VAULT_HEALTH_SIGNALS.map((s) => ({
+        ...s,
+        score: 0,
+        applicable: 0,
+        total: 0,
+        detail: "Add notes to start scoring.",
+      })),
+    };
+  }
+
+  // Pre-index reused emails (case-insensitive) so unique-email is O(n).
+  const emailCount = new Map();
+  for (const n of list) {
+    const e = String(n.email || "").trim().toLowerCase();
+    if (!e) continue;
+    emailCount.set(e, (emailCount.get(e) || 0) + 1);
+  }
+
+  let twofaPass = 0;
+  let twofaTotal = total;
+  let recoveryPass = 0;
+  let recoveryTotal = 0;
+  let uniqueEmailPass = 0;
+  let uniqueEmailTotal = 0;
+  let passkeyPass = 0;
+  let pwGoodPass = 0;
+  let pwTotal = 0;
+  let freshPass = 0;
+  let freshTotal = 0;
+
+  for (const n of list) {
+    const auth = String(n.authMethod || "").toLowerCase();
+    const backup = String(n.twofaBackup || "none").toLowerCase();
+    const hasTwofa = auth === "passkey" || (backup && backup !== "none");
+    if (hasTwofa) twofaPass++;
+    if (hasTwofa) {
+      recoveryTotal++;
+      const codes = Array.isArray(n.recoveryCodes) ? n.recoveryCodes.filter(Boolean) : [];
+      if (codes.length > 0) recoveryPass++;
+    }
+    const email = String(n.email || "").trim().toLowerCase();
+    if (email) {
+      uniqueEmailTotal++;
+      if ((emailCount.get(email) || 0) <= 1) uniqueEmailPass++;
+    }
+    if (auth === "passkey") passkeyPass++;
+    if (auth === "password") {
+      pwTotal++;
+      const bucket = String(n.passwordHint?.complexity || "").toLowerCase();
+      if (bucket === "good" || bucket === "strong") pwGoodPass++;
+    }
+    const updated = Number(n.updatedAt);
+    if (Number.isFinite(updated)) {
+      freshTotal++;
+      if (now - updated <= VAULT_HEALTH_FRESHNESS_MS) freshPass++;
+    }
+  }
+
+  const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
+  const reusedGroups = Array.from(emailCount.values()).filter((c) => c > 1).length;
+  const olderCount = freshTotal - freshPass;
+
+  const detailFor = (id) => {
+    switch (id) {
+      case "twofa":
+        return twofaPass === total
+          ? `All ${total} note${total === 1 ? "" : "s"} have a 2FA factor.`
+          : `${twofaTotal - twofaPass} of ${twofaTotal} note${twofaTotal === 1 ? "" : "s"} have no 2FA recorded.`;
+      case "recoveryCodes":
+        if (recoveryTotal === 0) return "No 2FA notes yet — nothing to back up.";
+        return recoveryPass === recoveryTotal
+          ? `Backup codes saved for all ${recoveryTotal} 2FA note${recoveryTotal === 1 ? "" : "s"}.`
+          : `${recoveryTotal - recoveryPass} of ${recoveryTotal} 2FA note${recoveryTotal === 1 ? "" : "s"} missing recovery codes.`;
+      case "uniqueEmail":
+        if (uniqueEmailTotal === 0) return "No emails recorded.";
+        return reusedGroups === 0
+          ? `All ${uniqueEmailTotal} recorded email${uniqueEmailTotal === 1 ? " is" : "s are"} unique.`
+          : `${reusedGroups} email${reusedGroups === 1 ? "" : "s"} reused across multiple sites.`;
+      case "passkey":
+        return passkeyPass > 0
+          ? `${passkeyPass} of ${total} note${total === 1 ? "" : "s"} use a passkey.`
+          : "No passkeys recorded — adopt where supported.";
+      case "passwordStrength":
+        if (pwTotal === 0) return "No password-auth notes — nothing to grade.";
+        return pwGoodPass === pwTotal
+          ? `All ${pwTotal} password note${pwTotal === 1 ? "" : "s"} rated good or strong.`
+          : `${pwTotal - pwGoodPass} of ${pwTotal} password note${pwTotal === 1 ? "" : "s"} are weak or okay.`;
+      case "freshness":
+        if (freshTotal === 0) return "No timestamps yet.";
+        return olderCount === 0
+          ? `All notes touched in the last 12 months.`
+          : `${olderCount} note${olderCount === 1 ? " hasn't" : "s haven't"} been reviewed in a year.`;
+      default: return "";
+    }
+  };
+
+  const signals = VAULT_HEALTH_SIGNALS.map((s) => {
+    let pass = 0;
+    let denom = 0;
+    if (s.id === "twofa") { pass = twofaPass; denom = twofaTotal; }
+    else if (s.id === "recoveryCodes") { pass = recoveryPass; denom = recoveryTotal; }
+    else if (s.id === "uniqueEmail") { pass = uniqueEmailPass; denom = uniqueEmailTotal; }
+    else if (s.id === "passkey") { pass = passkeyPass; denom = total; }
+    else if (s.id === "passwordStrength") { pass = pwGoodPass; denom = pwTotal; }
+    else if (s.id === "freshness") { pass = freshPass; denom = freshTotal; }
+    const sig = {
+      id: s.id,
+      label: s.label,
+      weight: s.weight,
+      score: pct(pass, denom),
+      applicable: denom,
+      total: pass,
+      detail: detailFor(s.id),
+    };
+    return sig;
+  });
+
+  let weighted = 0;
+  let weightTotal = 0;
+  for (const sig of signals) {
+    if (sig.applicable === 0) continue;
+    weighted += sig.weight * sig.score;
+    weightTotal += sig.weight;
+  }
+  const score = weightTotal > 0 ? Math.round(weighted / weightTotal) : 0;
+  return {
+    score,
+    grade: gradeForScore(score),
+    total,
+    signals,
+  };
+}
+
+/**
  * Per-site security checklist. Given a single decrypted note and the full
  * (decrypted, active) list it lives in, return a pass/fail breakdown for the
  * three hygiene questions surfaced in the popup: is 2FA on?, is the email

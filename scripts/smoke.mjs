@@ -955,4 +955,63 @@ for (const needle of [".attachment-row", ".attachments-readout", ".attachment-th
   if (!attPopupCss.includes(needle)) { console.error("popup.css missing", needle); process.exit(1); }
 }
 
+// --- Vault health score (weighted security signals) ---------------
+if (!Array.isArray(notes.VAULT_HEALTH_SIGNALS) || notes.VAULT_HEALTH_SIGNALS.length !== 6) {
+  console.error("VAULT_HEALTH_SIGNALS missing or wrong length"); process.exit(1);
+}
+if (typeof notes.computeVaultHealth !== "function") {
+  console.error("computeVaultHealth missing"); process.exit(1);
+}
+const emptyHealth = notes.computeVaultHealth([]);
+if (emptyHealth.score !== 0 || emptyHealth.total !== 0 || emptyHealth.grade !== "\u2014") {
+  console.error("empty vault health wrong", emptyHealth); process.exit(1);
+}
+const nowH = 1_800_000_000_000;
+const hList = [
+  notes.normalizeNote({ origin: "a.test", authMethod: "passkey", email: "a@x.test" }, { now: nowH }),
+  notes.normalizeNote({ origin: "b.test", authMethod: "password", email: "b@x.test", twofaBackup: "app", recoveryCodes: ["123","456"], passwordHint: { length: 18, complexity: "strong" } }, { now: nowH }),
+  notes.normalizeNote({ origin: "c.test", authMethod: "password", email: "b@x.test", twofaBackup: "none", passwordHint: { length: 4, complexity: "weak" } }, { now: nowH - notes.VAULT_HEALTH_FRESHNESS_MS - 1000 }),
+];
+const health = notes.computeVaultHealth(hList, { now: nowH });
+if (!(health.score >= 0 && health.score <= 100)) { console.error("health.score out of range", health.score); process.exit(1); }
+if (typeof health.grade !== "string" || !health.grade.length) { console.error("missing grade"); process.exit(1); }
+const sigById = Object.fromEntries(health.signals.map((s) => [s.id, s]));
+// 2 of 3 have a 2FA factor (passkey + app backup) -> 67%
+if (sigById.twofa.score !== 67) { console.error("twofa share wrong", sigById.twofa); process.exit(1); }
+if (sigById.passkey.score !== 33) { console.error("passkey share wrong", sigById.passkey); process.exit(1); }
+if (sigById.uniqueEmail.applicable !== 3 || sigById.uniqueEmail.score !== 33) {
+  console.error("uniqueEmail share wrong (1 of 3 unique)", sigById.uniqueEmail); process.exit(1);
+}
+if (sigById.passwordStrength.applicable !== 2 || sigById.passwordStrength.score !== 50) {
+  console.error("passwordStrength share wrong", sigById.passwordStrength); process.exit(1);
+}
+if (sigById.freshness.score !== 67) {
+  console.error("freshness share wrong (2 of 3 fresh)", sigById.freshness); process.exit(1);
+}
+if (sigById.recoveryCodes.applicable !== 2 || sigById.recoveryCodes.score !== 50) {
+  console.error("recoveryCodes share wrong", sigById.recoveryCodes); process.exit(1);
+}
+// Signals with applicable=0 must drop out of the weighted average.
+const pkOnly = [notes.normalizeNote({ origin: "p.test", authMethod: "passkey" }, { now: nowH })];
+const pkHealth = notes.computeVaultHealth(pkOnly, { now: nowH });
+const pkRec = pkHealth.signals.find((s) => s.id === "passwordStrength");
+if (!pkRec || pkRec.applicable !== 0) { console.error("passwordStrength should be NA in passkey-only vault"); process.exit(1); }
+
+const healthPopupHtml = fs.readFileSync("src/popup.html", "utf8");
+for (const needle of ["stats-health", "stats-health-grade", "stats-health-score", "stats-health-ring-fill", "stats-health-signals"]) {
+  if (!healthPopupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+const healthPopupJs = fs.readFileSync("src/popup.js", "utf8");
+for (const needle of ["renderVaultHealth", "stats-health-ring-fill"]) {
+  if (!healthPopupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+const healthBgSrc = fs.readFileSync("src/background.js", "utf8");
+if (!healthBgSrc.includes('handlers["notes:health"]') || !healthBgSrc.includes("computeVaultHealth")) {
+  console.error("background.js missing notes:health wiring"); process.exit(1);
+}
+const healthPopupCss = fs.readFileSync("src/popup.css", "utf8");
+if (!healthPopupCss.includes(".stats-health") || !healthPopupCss.includes(".stats-health-signal-fill")) {
+  console.error("popup.css missing health styles"); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");

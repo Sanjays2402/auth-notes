@@ -29,6 +29,7 @@ import {
   auditEnvelopes,
   collectTags,
   computeVaultStats,
+  computeVaultHealth,
   decodeBackupContent,
   decryptAuditEvent,
   decryptNote,
@@ -622,7 +623,23 @@ handlers["notes:stats"] = async () => {
   }
   const stats = computeVaultStats(decrypted);
   stats.undecryptable = undecryptable;
+  stats.health = computeVaultHealth(decrypted);
   return stats;
+};
+
+handlers["notes:health"] = async () => {
+  const key = requireUnlocked();
+  const envelopes = await readEnvelopes();
+  const decrypted = [];
+  for (const env of envelopes) {
+    try {
+      const note = await decryptNote(key, env);
+      if (isTrashed(note)) continue;
+      decrypted.push(note);
+    }
+    catch (err) { console.warn("[auth-notes] skip undecryptable note for health", env.id, err); }
+  }
+  return computeVaultHealth(decrypted);
 };
 
 handlers["notes:schema"] = async () => ({

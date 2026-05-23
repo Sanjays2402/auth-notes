@@ -982,6 +982,23 @@ efgh-5678"></textarea>
       </div>
       <p id="stats-summary" class="search-summary" aria-live="polite">Crunching…</p>
       <div id="stats-body" class="stats-body" hidden>
+        <div class="glass stats-health" id="stats-health" hidden>
+          <div class="stats-health-head">
+            <div class="stats-health-meter">
+              <svg class="stats-health-ring" viewBox="0 0 80 80" width="72" height="72" aria-hidden="true">
+                <circle class="stats-health-ring-track" cx="40" cy="40" r="32" fill="none" stroke-width="6"/>
+                <circle id="stats-health-ring-fill" class="stats-health-ring-fill" cx="40" cy="40" r="32" fill="none" stroke-width="6" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100" transform="rotate(-90 40 40)"/>
+              </svg>
+              <span class="stats-health-grade" id="stats-health-grade">—</span>
+            </div>
+            <div class="stats-health-summary">
+              <span class="stats-card-title">Vault health</span>
+              <span class="stats-health-score"><strong id="stats-health-score">0</strong><span>/100</span></span>
+              <span class="stats-card-sub" id="stats-health-sub">Weighted across 2FA, recovery codes, unique emails, passkey adoption, password strength, and freshness.</span>
+            </div>
+          </div>
+          <ul id="stats-health-signals" class="stats-health-signals" role="list"></ul>
+        </div>
         <div class="stats-kpi-grid">
           <div class="glass stats-kpi" id="stats-kpi-total">
             <span class="stats-kpi-icon" aria-hidden="true">
