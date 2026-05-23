@@ -12,6 +12,7 @@ for (const p of [
   "src/popup.css",
   "src/background.js",
   "src/crypto.js",
+  "src/notes.js",
 ]) if (!fs.existsSync(p)) { console.error("missing file:", p); process.exit(1); }
 for (const sz of [16, 32, 48, 128])
   if (!fs.existsSync(`icons/icon-${sz}.png`)) { console.error("missing icon:", sz); process.exit(1); }
@@ -43,5 +44,44 @@ let rejected = false;
 try { await mod.verifyPassword("wrong-password", record); }
 catch { rejected = true; }
 if (!rejected) { console.error("wrong password should have failed"); process.exit(1); }
+
+// --- Notes model round-trip ---
+const notes = await import("../src/notes.js");
+const norm = notes.normalizeNote({
+  origin: "https://github.com/login",
+  authMethod: "passkey",
+  email: "me@example.com",
+  twofaBackup: "hardware-key",
+  twofaDetail: "YubiKey 5C in desk drawer",
+  notes: "primary identity",
+});
+if (norm.origin !== "github.com") { console.error("origin not normalized"); process.exit(1); }
+if (!norm.id || norm.id.length < 10) { console.error("missing id"); process.exit(1); }
+if (!norm.createdAt || !norm.updatedAt) { console.error("missing timestamps"); process.exit(1); }
+
+const env = await notes.encryptNote(key, norm);
+if (env.origin !== "github.com") { console.error("envelope origin"); process.exit(1); }
+if (!env.iv || !env.ct) { console.error("envelope missing ciphertext"); process.exit(1); }
+if (env.email || env.notes || env.twofaDetail) {
+  console.error("sensitive fields leaked into envelope"); process.exit(1);
+}
+const back = await notes.decryptNote(key, env);
+if (back.email !== "me@example.com" || back.twofaDetail !== "YubiKey 5C in desk drawer") {
+  console.error("note round-trip mismatch"); process.exit(1);
+}
+
+let originRejected = false;
+try { notes.normalizeNote({ origin: "", authMethod: "password" }); }
+catch { originRejected = true; }
+if (!originRejected) { console.error("empty origin should reject"); process.exit(1); }
+
+const sorted = notes.sortNotes([
+  { label: "a", updatedAt: 1 },
+  { label: "b", updatedAt: 5 },
+  { label: "c", updatedAt: 3 },
+]);
+if (sorted[0].label !== "b" || sorted[2].label !== "a") {
+  console.error("sort order wrong"); process.exit(1);
+}
 
 console.log("\u2713 smoke ok");

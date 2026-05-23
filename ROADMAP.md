@@ -4,7 +4,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 
 - [x] MV3 manifest + service worker scaffolding
 - [x] Master password setup (PBKDF2 → AES-GCM key)
-- [ ] Per-site notes: auth method, email used, 2FA backup location
+- [x] Per-site notes: auth method, email used, 2FA backup location
 - [ ] Auto-detect current site, surface matching note in popup
 - [ ] Encrypt all notes at rest in chrome.storage.local
 - [ ] Lock/unlock with master password
