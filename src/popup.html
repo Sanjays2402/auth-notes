@@ -83,17 +83,96 @@
       </form>
     </section>
 
-    <!-- Vault home placeholder (post-setup) -->
-    <section id="view-vault" class="view empty" hidden>
-      <svg class="empty-art" viewBox="0 0 160 120" width="160" height="120" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="28" y="44" width="104" height="60" rx="10" opacity=".75"/>
-        <path d="M52 44V32a28 28 0 0 1 56 0v12" opacity=".75"/>
-        <circle cx="80" cy="74" r="6"/>
-        <path d="M80 80v8"/>
-        <path d="M20 28l6 4M140 28l-6 4M16 60h6M138 60h6" opacity=".4"/>
-      </svg>
-      <h2 class="empty-title">Vault unlocked</h2>
-      <p class="empty-sub">Per-site notes land here as the roadmap fills in.</p>
+    <!-- Vault home: current-site detector + matched note -->
+    <section id="view-vault" class="view vault" hidden>
+      <div class="site-card glass" id="site-card">
+        <div class="site-head">
+          <span class="site-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M3 12h18"/>
+              <path d="M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/>
+            </svg>
+          </span>
+          <div class="site-meta">
+            <span class="site-label" id="site-label">Detecting&hellip;</span>
+            <span class="site-sub" id="site-sub">current tab</span>
+          </div>
+        </div>
+
+        <!-- Loading state -->
+        <div class="site-state" id="site-loading">
+          <span class="shimmer-line" style="width: 70%"></span>
+          <span class="shimmer-line" style="width: 45%"></span>
+          <span class="shimmer-line" style="width: 60%"></span>
+        </div>
+
+        <!-- Unsupported page (chrome://, about:, file:// etc.) -->
+        <div class="site-state" id="site-unsupported" hidden>
+          <div class="hint">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M12 8v5"/><path d="M12 16h.01"/>
+            </svg>
+            <span>Not a regular web page &mdash; open a site to surface its note.</span>
+          </div>
+        </div>
+
+        <!-- No match -->
+        <div class="site-state" id="site-empty" hidden>
+          <svg class="site-empty-art" viewBox="0 0 120 80" width="120" height="80" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="18" y="22" width="84" height="44" rx="8" opacity=".7"/>
+            <path d="M34 22V14a10 10 0 0 1 20 0v8" opacity=".7"/>
+            <path d="M70 44h18" opacity=".4"/>
+            <path d="M70 52h12" opacity=".4"/>
+            <circle cx="36" cy="48" r="4"/>
+            <path d="M36 52v4"/>
+          </svg>
+          <p class="site-empty-title">No note for this site yet</p>
+          <p class="site-empty-sub">Quick-add lands soon &mdash; until then, notes saved elsewhere will appear here automatically.</p>
+        </div>
+
+        <!-- Match found -->
+        <div class="site-state" id="site-match" hidden>
+          <div class="match-head">
+            <span class="match-label" id="match-label"></span>
+            <span class="chip" id="match-auth"></span>
+          </div>
+          <dl class="match-fields">
+            <div class="match-row" id="match-row-email" hidden>
+              <dt>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2.5"/>
+                  <path d="M3.5 7l8.5 6 8.5-6"/>
+                </svg>
+                <span>Email</span>
+              </dt>
+              <dd id="match-email"></dd>
+            </div>
+            <div class="match-row" id="match-row-2fa" hidden>
+              <dt>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/>
+                  <path d="M9 12l2 2 4-4"/>
+                </svg>
+                <span>2FA backup</span>
+              </dt>
+              <dd id="match-2fa"></dd>
+            </div>
+            <div class="match-row" id="match-row-notes" hidden>
+              <dt>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5z"/>
+                  <path d="M9 10h7M9 14h7M9 18h4"/>
+                </svg>
+                <span>Notes</span>
+              </dt>
+              <dd id="match-notes"></dd>
+            </div>
+          </dl>
+          <p class="match-foot" id="match-foot"></p>
+        </div>
+      </div>
     </section>
   </main>
   <footer class="footer"><span class="version">v0.1.0</span></footer>

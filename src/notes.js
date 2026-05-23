@@ -58,6 +58,26 @@ export function originOf(input) {
   }
 }
 
+/**
+ * True when the URL targets a regular web page we can surface notes for.
+ * Excludes chrome://, about:, file://, view-source:, devtools, extension pages, etc.
+ */
+export function isSupportedUrl(input) {
+  if (!input) return false;
+  let u;
+  try { u = new URL(String(input)); }
+  catch { return false; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  if (!u.hostname) return false;
+  return true;
+}
+
+/** Strip a leading `www.` for display purposes only. Storage origin is unchanged. */
+export function displayOrigin(origin) {
+  const s = String(origin || "").toLowerCase();
+  return s.startsWith("www.") ? s.slice(4) : s;
+}
+
 /** Generate a short, unguessable id. 16 random bytes → 22-char base64url. */
 export function newId() {
   const b = new Uint8Array(16);
