@@ -37,13 +37,13 @@ function syncThemeControls() {
 function show(id) {
   for (const v of document.querySelectorAll(".view")) v.hidden = v.id !== id;
   const lockBtn = document.getElementById("lock-btn");
-  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search" && id !== "view-quick-add" && id !== "view-audit";
+  if (lockBtn) lockBtn.hidden = id !== "view-vault" && id !== "view-settings" && id !== "view-search" && id !== "view-quick-add" && id !== "view-audit" && id !== "view-duplicates";
   const searchBtn = document.getElementById("search-btn");
   if (searchBtn) searchBtn.hidden = id !== "view-vault";
   const addBtn = document.getElementById("add-btn");
   if (addBtn) addBtn.hidden = id !== "view-vault";
   const settingsBtn = document.getElementById("settings-btn");
-  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search" || id === "view-quick-add" || id === "view-audit";
+  if (settingsBtn) settingsBtn.hidden = id === "view-settings" || id === "view-setup" || id === "view-lock" || id === "view-search" || id === "view-quick-add" || id === "view-audit" || id === "view-duplicates";
 }
 
 async function send(type, payload = {}) {
@@ -207,6 +207,7 @@ function bindSettings() {
   bindExport();
   bindImport();
   bindAudit();
+  bindDuplicates();
   bindThemePicker();
   bindShortcutCard();
 
@@ -624,6 +625,112 @@ async function renderAuditLog() {
 async function openAuditLog() {
   show("view-audit");
   await renderAuditLog();
+}
+
+function bindDuplicates() {
+  const opener = document.getElementById("dupes-open");
+  opener?.addEventListener("click", () => {
+    opener.animate(
+      [{ transform: "scale(1)" }, { transform: "scale(0.96)" }, { transform: "scale(1)" }],
+      { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+    );
+    openDuplicates();
+  });
+  const back = document.getElementById("dupes-back");
+  back?.addEventListener("click", () => openSettings());
+  const list = document.getElementById("dupes-list");
+  list?.addEventListener("click", async (e) => {
+    const btn = e.target instanceof Element ? e.target.closest("[data-edit-id]") : null;
+    if (!btn) return;
+    e.preventDefault();
+    const id = btn.getAttribute("data-edit-id");
+    if (!id) return;
+    try {
+      const note = await send("notes:get", { id });
+      if (note) { await openQuickAdd({ note }); return; }
+    } catch (err) { console.warn("[auth-notes] dupes edit failed", err); }
+  });
+}
+
+async function openDuplicates() {
+  show("view-duplicates");
+  await renderDuplicates();
+}
+
+async function renderDuplicates() {
+  const list = document.getElementById("dupes-list");
+  const empty = document.getElementById("dupes-empty");
+  const summary = document.getElementById("dupes-summary");
+  const emptyTitle = document.getElementById("dupes-empty-title");
+  const emptySub = document.getElementById("dupes-empty-sub");
+  if (!list || !empty || !summary) return;
+  list.innerHTML = "";
+  summary.textContent = "Scanning\u2026";
+  empty.hidden = true;
+  let payload;
+  try { payload = await send("notes:duplicates"); }
+  catch (err) {
+    summary.textContent = "";
+    empty.hidden = false;
+    if (emptyTitle) emptyTitle.textContent = "Couldn\u2019t scan";
+    if (emptySub) emptySub.textContent = String(err?.message || err);
+    return;
+  }
+  const groups = Array.isArray(payload?.groups) ? payload.groups : [];
+  const totalNotes = Number(payload?.totalNotes) || 0;
+  if (groups.length === 0) {
+    summary.textContent = `${totalNotes} note${totalNotes === 1 ? "" : "s"} scanned \u2014 no reused emails`;
+    empty.hidden = false;
+    if (emptyTitle) emptyTitle.textContent = totalNotes === 0 ? "Nothing to scan" : "No reused emails";
+    if (emptySub) emptySub.textContent = totalNotes === 0
+      ? "Add a few notes with email/identifier set, then come back."
+      : "Every recorded identity is unique across your sites. Nice.";
+    return;
+  }
+  const exposed = groups.reduce((sum, g) => sum + g.count, 0);
+  summary.textContent = `${groups.length} reused email${groups.length === 1 ? "" : "s"} across ${exposed} of ${totalNotes} note${totalNotes === 1 ? "" : "s"}`;
+  const frag = document.createDocumentFragment();
+  for (const g of groups) {
+    const li = document.createElement("li");
+    li.className = "dupes-group";
+    const items = g.notes.map((n) => {
+      const fav = faviconHtml(n.origin, 24, n.label || displayOrigin(n.origin));
+      const auth = prettyAuth(n.authMethod);
+      const used = Number(n.lastUsedAt);
+      const ref = Number.isFinite(used) && used > 0 ? used : Number(n.updatedAt) || 0;
+      const rel = ref ? formatRelative(ref) : "";
+      return `
+        <li class="dupes-site">
+          ${fav}
+          <span class="dupes-site-meta">
+            <span class="dupes-site-label">${escapeHtml(n.label || displayOrigin(n.origin))}</span>
+            <span class="dupes-site-sub">${escapeHtml(displayOrigin(n.origin))}${rel ? ` \u2022 ${escapeHtml(rel)}` : ""}</span>
+          </span>
+          ${auth ? `<span class="chip" data-auth="${escapeHtml(String(n.authMethod || "").toLowerCase())}">${escapeHtml(auth)}</span>` : ""}
+          <button type="button" class="icon-btn dupes-edit" data-edit-id="${escapeHtml(n.id)}" title="Edit note" aria-label="Edit note">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 4l6 6-11 11H3v-6z"/><path d="M13 5l6 6"/>
+            </svg>
+          </button>
+        </li>
+      `;
+    }).join("");
+    li.innerHTML = `
+      <div class="dupes-head">
+        <span class="dupes-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="2.5"/>
+            <path d="M3.5 7l8.5 6 8.5-6"/>
+          </svg>
+        </span>
+        <span class="dupes-email" title="${escapeHtml(g.email)}">${escapeHtml(g.email)}</span>
+        <span class="dupes-count">${g.count} sites</span>
+      </div>
+      <ul class="dupes-sites">${items}</ul>
+    `;
+    frag.appendChild(li);
+  }
+  list.appendChild(frag);
 }
 
 function bindAudit() {

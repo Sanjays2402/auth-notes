@@ -572,6 +572,34 @@ export function recencyOf(note) {
   return Number(note.updatedAt) || 0;
 }
 
+/** Find groups of decrypted notes sharing the same email/identifier. Useful
+ *  as a security-hygiene check: spotting reused identities across sites flags
+ *  blast-radius risks (one compromised inbox unlocks many places). Email is
+ *  matched case-insensitively after trimming surrounding whitespace; empty
+ *  emails are ignored. Groups are returned sorted by group size desc, then
+ *  alphabetically by email. Notes inside each group keep their input order. */
+export function findDuplicateEmails(notes, { minCount = 2 } = {}) {
+  if (!Array.isArray(notes)) return [];
+  const min = Math.max(2, Math.floor(Number(minCount) || 2));
+  const groups = new Map();
+  for (const note of notes) {
+    if (!note || typeof note !== "object") continue;
+    const raw = String(note.email || "").trim();
+    if (!raw) continue;
+    const key = raw.toLowerCase();
+    let g = groups.get(key);
+    if (!g) { g = { email: raw, notes: [] }; groups.set(key, g); }
+    g.notes.push(note);
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    if (g.notes.length < min) continue;
+    out.push({ email: g.email, count: g.notes.length, notes: g.notes });
+  }
+  out.sort((a, b) => (b.count - a.count) || a.email.localeCompare(b.email));
+  return out;
+}
+
 export function sortNotes(list) {
   return [...list].sort((a, b) => {
     const dt = recencyOf(b) - recencyOf(a);

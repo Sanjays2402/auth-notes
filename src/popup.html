@@ -713,7 +713,50 @@ efgh-5678"></textarea>
           </div>
         </div>
       </div>
+      <div class="glass settings-card">
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <span class="settings-row-title">Duplicate-email check</span>
+            <span class="settings-row-sub">Find sites where you reused the same email or identifier &mdash; one compromised inbox is one compromised everything.</span>
+          </div>
+        </div>
+        <div class="settings-control">
+          <div class="import-row">
+            <button type="button" id="dupes-open" class="btn-secondary">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="4" width="12" height="12" rx="2.5"/>
+                <rect x="8" y="8" width="12" height="12" rx="2.5"/>
+              </svg>
+              <span class="btn-label">Scan for duplicates</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
+    </section>
+
+    <!-- Duplicate-email scanner -->
+    <section id="view-duplicates" class="view duplicates" hidden>
+      <div class="settings-head">
+        <button type="button" id="dupes-back" class="icon-btn" title="Back" aria-label="Back">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+        </button>
+        <h2 class="view-title settings-title">Duplicate emails</h2>
+      </div>
+      <p id="dupes-summary" class="search-summary" aria-live="polite"></p>
+      <ul id="dupes-list" class="dupes-list" role="list"></ul>
+      <div id="dupes-empty" class="search-empty" hidden>
+        <svg viewBox="0 0 140 100" width="140" height="100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M70 18l52 30v22c0 18-22 28-52 30-30-2-52-12-52-30V48z" opacity=".7"/>
+          <path d="M55 56l11 11 22-24"/>
+          <circle cx="122" cy="22" r="2" opacity=".5"/>
+          <circle cx="18" cy="82" r="2.5" opacity=".5"/>
+        </svg>
+        <p class="site-empty-title" id="dupes-empty-title">No reused emails</p>
+        <p class="site-empty-sub" id="dupes-empty-sub">Every recorded identity is unique across your sites. Nice.</p>
+      </div>
     </section>
 
     <!-- Audit log viewer -->

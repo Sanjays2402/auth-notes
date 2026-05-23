@@ -30,6 +30,7 @@ import {
   decryptNote,
   encryptAuditEvent,
   encryptNote,
+  findDuplicateEmails,
   normalizeAuditEvent,
   normalizeNote,
   normalizeTag,
@@ -467,6 +468,30 @@ handlers["backup:import"] = async (msg) => {
     failed,
     finalCount: next.length,
   };
+};
+
+handlers["notes:duplicates"] = async () => {
+  const key = requireUnlocked();
+  const envelopes = await readEnvelopes();
+  const decrypted = [];
+  for (const env of envelopes) {
+    try { decrypted.push(await decryptNote(key, env)); }
+    catch (err) { console.warn("[auth-notes] skip undecryptable note", env.id, err); }
+  }
+  const groups = findDuplicateEmails(decrypted).map((g) => ({
+    email: g.email,
+    count: g.count,
+    notes: g.notes.map((n) => ({
+      id: n.id,
+      origin: n.origin,
+      label: n.label || n.origin,
+      authMethod: n.authMethod || "",
+      twofaBackup: n.twofaBackup || "none",
+      updatedAt: n.updatedAt || 0,
+      lastUsedAt: Number.isFinite(n.lastUsedAt) ? n.lastUsedAt : null,
+    })),
+  }));
+  return { groups, totalNotes: decrypted.length, totalGroups: groups.length };
 };
 
 handlers["notes:audit"] = async () => {
