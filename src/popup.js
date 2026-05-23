@@ -1,6 +1,7 @@
 // Auth Notes — popup entry point
 
 import { renderMarkdown, markdownToText } from "./markdown.js";
+import { computeSecurityChecklist } from "./notes.js";
 
 const THEME_MEDIA = window.matchMedia("(prefers-color-scheme: light)");
 let themePref = "auto"; // "auto" | "dark" | "light"
@@ -1996,7 +1997,7 @@ function formatRelative(ts) {
 }
 
 let currentMatchNote = null;
-function renderMatch(note) {
+function renderMatch(note, allNotes = []) {
   currentMatchNote = note;
   setSiteState("site-match");
   setText("match-label", note.label || displayOrigin(note.origin));
@@ -2087,6 +2088,43 @@ function renderMatch(note) {
       tagsEl.innerHTML = tags.map((t) => `<span class="tag-chip" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join("");
     }
   }
+
+  renderSecurityChecklist(note, allNotes);
+}
+
+function renderSecurityChecklist(note, allNotes) {
+  const root = document.getElementById("match-checklist");
+  const list = document.getElementById("checklist-list");
+  const scoreEl = document.getElementById("checklist-score");
+  if (!root || !list) return;
+  let report;
+  try { report = computeSecurityChecklist(note, Array.isArray(allNotes) ? allNotes : []); }
+  catch { root.hidden = true; return; }
+  root.hidden = false;
+  if (scoreEl) {
+    scoreEl.textContent = `${report.pass}/${report.applicable} pass`;
+    scoreEl.dataset.tone = report.fail === 0 ? "good" : (report.pass === 0 ? "bad" : "warn");
+  }
+  list.innerHTML = report.items.map((item) => {
+    const icon = checklistIcon(item.status);
+    return `<li class="checklist-item" data-status="${escapeHtml(item.status)}">`
+      + `<span class="checklist-icon" aria-hidden="true">${icon}</span>`
+      + `<span class="checklist-body">`
+        + `<span class="checklist-label">${escapeHtml(item.label)}</span>`
+        + (item.detail ? `<span class="checklist-detail">${escapeHtml(item.detail)}</span>` : "")
+      + `</span>`
+    + `</li>`;
+  }).join("");
+}
+
+function checklistIcon(status) {
+  if (status === "pass") {
+    return `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>`;
+  }
+  if (status === "fail") {
+    return `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><path d="M12 16.5h.01"/></svg>`;
+  }
+  return `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>`;
 }
 
 function maskCode(code) {
@@ -2370,7 +2408,12 @@ async function refreshCurrentSite() {
   try {
     const matches = await send("notes:list", { origin });
     if (Array.isArray(matches) && matches.length > 0) {
-      renderMatch(matches[0]);
+      let allNotes = matches;
+      try {
+        const full = await send("notes:list", {});
+        if (Array.isArray(full)) allNotes = full;
+      } catch { /* fall back to scoped list */ }
+      renderMatch(matches[0], allNotes);
       // Fire-and-forget: bump lastUsedAt so this site rises on the next sort.
       // Debounced inside the service worker so a quick popup re-open is free.
       send("notes:touch", { id: matches[0].id }).catch(() => { /* best-effort */ });

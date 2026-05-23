@@ -299,6 +299,19 @@
           </dl>
           <p class="match-foot" id="match-foot"></p>
           <div class="match-tags" id="match-tags" hidden></div>
+          <div class="checklist" id="match-checklist" hidden>
+            <div class="checklist-head">
+              <span class="checklist-title">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M9 11l3 3 8-8"/>
+                  <path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8"/>
+                </svg>
+                <span>Security checklist</span>
+              </span>
+              <span class="checklist-score" id="checklist-score" aria-live="polite"></span>
+            </div>
+            <ul class="checklist-list" id="checklist-list"></ul>
+          </div>
           <div class="match-actions">
             <button type="button" id="match-pin" class="btn-secondary btn-compact" data-pinned="false" aria-pressed="false" title="Pin to top">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

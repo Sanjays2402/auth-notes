@@ -2310,3 +2310,114 @@ body[data-theme="light"] .trash-list::-webkit-scrollbar-thumb { background: rgba
   opacity: 0.92;
 }
 .settings-hint.is-error { color: rgba(255, 138, 152, 0.92); }
+
+/* --- Security checklist (per-site) ----------------------------- */
+.checklist {
+  margin-top: 12px;
+  padding: 12px 12px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: checklist-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes checklist-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.checklist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.checklist-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+.checklist-title svg { opacity: 0.85; color: var(--accent); }
+.checklist-score {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+  transition: background 200ms cubic-bezier(0.16, 1, 0.3, 1), color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.checklist-score[data-tone="good"] { color: #8be9b1; background: rgba(64, 200, 130, 0.12); border-color: rgba(64, 200, 130, 0.28); }
+.checklist-score[data-tone="warn"] { color: #ffcf8a; background: rgba(255, 184, 110, 0.12); border-color: rgba(255, 184, 110, 0.28); }
+.checklist-score[data-tone="bad"]  { color: #ff9aa5; background: rgba(255, 110, 130, 0.12); border-color: rgba(255, 110, 130, 0.28); }
+.checklist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 200ms cubic-bezier(0.16, 1, 0.3, 1), border-color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.checklist-item[data-status="pass"] .checklist-icon { color: #6ddf9d; }
+.checklist-item[data-status="fail"] .checklist-icon { color: #ff8aa5; }
+.checklist-item[data-status="na"]   .checklist-icon { color: rgba(255, 255, 255, 0.45); }
+.checklist-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.checklist-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.checklist-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.4;
+}
+.checklist-detail {
+  font-size: 11px;
+  letter-spacing: -0.005em;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.45;
+}
+@media (prefers-color-scheme: light) {
+  body[data-theme="auto"] .checklist { background: rgba(0, 0, 0, 0.025); border-color: rgba(0, 0, 0, 0.08); }
+  body[data-theme="auto"] .checklist-title { color: rgba(20, 24, 36, 0.65); }
+  body[data-theme="auto"] .checklist-score { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.08); color: rgba(20, 24, 36, 0.75); }
+  body[data-theme="auto"] .checklist-item { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.05); }
+  body[data-theme="auto"] .checklist-label { color: rgba(20, 24, 36, 0.92); }
+  body[data-theme="auto"] .checklist-detail { color: rgba(20, 24, 36, 0.6); }
+}
+body[data-theme="light"] .checklist { background: rgba(0, 0, 0, 0.025); border-color: rgba(0, 0, 0, 0.08); }
+body[data-theme="light"] .checklist-title { color: rgba(20, 24, 36, 0.65); }
+body[data-theme="light"] .checklist-score { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.08); color: rgba(20, 24, 36, 0.75); }
+body[data-theme="light"] .checklist-item { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.05); }
+body[data-theme="light"] .checklist-label { color: rgba(20, 24, 36, 0.92); }
+body[data-theme="light"] .checklist-detail { color: rgba(20, 24, 36, 0.6); }

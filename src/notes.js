@@ -810,6 +810,131 @@ export function computeVaultStats(notes) {
   };
 }
 
+/**
+ * Per-site security checklist. Given a single decrypted note and the full
+ * (decrypted, active) list it lives in, return a pass/fail breakdown for the
+ * three hygiene questions surfaced in the popup: is 2FA on?, is the email
+ * used here unique across the vault?, and are recovery codes saved?
+ *
+ * Pure function — no storage, no crypto. Safe to call on every render.
+ *
+ *  - twofa: passes when the note's `authMethod` is `passkey` (the passkey IS
+ *    the 2nd factor) OR `twofaBackup` is anything other than `none`/empty.
+ *  - uniqueEmail: passes when `email` is set AND no OTHER active note in the
+ *    vault uses the same email (case-insensitive). Notes without an email
+ *    fail with an explanatory detail. Skipped (status "na") when the auth
+ *    method is one where an email isn't meaningful (e.g. `passkey`, `sso`).
+ *  - recoveryCodes: passes when `recoveryCodes` has at least one entry.
+ *    Skipped when there is no 2FA configured (nothing to recover).
+ *
+ * Each item carries: { id, label, status, detail }. `status` is one of
+ * `pass`, `fail`, `na`. Helpers below derive aggregate counts and a percent.
+ */
+export const SECURITY_CHECKLIST_IDS = Object.freeze(["twofa", "uniqueEmail", "recoveryCodes"]);
+
+export function computeSecurityChecklist(note, allNotes = []) {
+  if (!note || typeof note !== "object") {
+    throw new Error("note must be an object");
+  }
+  const list = Array.isArray(allNotes) ? allNotes : [];
+  const auth = String(note.authMethod || "").toLowerCase();
+  const backup = String(note.twofaBackup || "none").toLowerCase();
+  const hasTwofa = auth === "passkey" || (backup && backup !== "none");
+  const codes = Array.isArray(note.recoveryCodes) ? note.recoveryCodes.filter(Boolean) : [];
+  const emailRaw = String(note.email || "").trim();
+  const emailKey = emailRaw.toLowerCase();
+
+  // 2FA item
+  const twofaItem = hasTwofa
+    ? {
+        id: "twofa",
+        label: "2FA enabled",
+        status: "pass",
+        detail: auth === "passkey"
+          ? "Passkey acts as the second factor"
+          : `Backup via ${backup.replace(/-/g, " ")}`,
+      }
+    : {
+        id: "twofa",
+        label: "2FA enabled",
+        status: "fail",
+        detail: "No 2FA method recorded for this site",
+      };
+
+  // Unique email item
+  let emailItem;
+  if (auth === "passkey" || auth === "sso") {
+    emailItem = {
+      id: "uniqueEmail",
+      label: "Unique email",
+      status: "na",
+      detail: `Not meaningful for ${auth === "sso" ? "SSO" : "passkey"} sign-in`,
+    };
+  } else if (!emailRaw) {
+    emailItem = {
+      id: "uniqueEmail",
+      label: "Unique email",
+      status: "fail",
+      detail: "No email recorded",
+    };
+  } else {
+    let sharedWith = 0;
+    for (const other of list) {
+      if (!other || typeof other !== "object") continue;
+      if (other.id === note.id) continue;
+      if (isTrashed(other)) continue;
+      const otherEmail = String(other.email || "").trim().toLowerCase();
+      if (otherEmail && otherEmail === emailKey) sharedWith++;
+    }
+    emailItem = sharedWith === 0
+      ? {
+          id: "uniqueEmail",
+          label: "Unique email",
+          status: "pass",
+          detail: "Not reused on any other site in the vault",
+        }
+      : {
+          id: "uniqueEmail",
+          label: "Unique email",
+          status: "fail",
+          detail: `Also used on ${sharedWith} other site${sharedWith === 1 ? "" : "s"}`,
+        };
+  }
+
+  // Recovery codes item
+  let codesItem;
+  if (!hasTwofa) {
+    codesItem = {
+      id: "recoveryCodes",
+      label: "Recovery codes saved",
+      status: "na",
+      detail: "No 2FA configured — nothing to recover",
+    };
+  } else if (codes.length > 0) {
+    codesItem = {
+      id: "recoveryCodes",
+      label: "Recovery codes saved",
+      status: "pass",
+      detail: `${codes.length} code${codes.length === 1 ? "" : "s"} stored`,
+    };
+  } else {
+    codesItem = {
+      id: "recoveryCodes",
+      label: "Recovery codes saved",
+      status: "fail",
+      detail: "Add backup codes so a lost 2FA factor can't lock you out",
+    };
+  }
+
+  const items = [twofaItem, emailItem, codesItem];
+  const pass = items.filter((i) => i.status === "pass").length;
+  const fail = items.filter((i) => i.status === "fail").length;
+  const na = items.filter((i) => i.status === "na").length;
+  const applicable = items.length - na;
+  const score = applicable > 0 ? Math.round((pass / applicable) * 100) : 100;
+  return { items, pass, fail, na, total: items.length, applicable, score };
+}
+
 export function sortNotes(list) {
   return [...list].sort((a, b) => {
     const pa = a && a.pinned ? 1 : 0;
