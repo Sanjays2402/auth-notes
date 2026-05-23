@@ -741,4 +741,115 @@ if (!trashPopupCss.includes(".trash-list") || !trashPopupCss.includes(".trash-it
   console.error("popup.css missing trash styles"); process.exit(1);
 }
 
+// --- Per-note edit history (last 5) --------------------------------
+if (typeof notes.appendNoteHistory !== "function" || typeof notes.diffNoteFields !== "function" || typeof notes.normalizeHistory !== "function") {
+  console.error("history helpers missing from notes.js"); process.exit(1);
+}
+if (notes.HISTORY_MAX !== 5) { console.error("HISTORY_MAX drift"); process.exit(1); }
+if (!Array.isArray(notes.HISTORY_TRACKED_FIELDS) || !notes.HISTORY_TRACKED_FIELDS.includes("label")) {
+  console.error("HISTORY_TRACKED_FIELDS missing"); process.exit(1);
+}
+// `history` must be forbidden on the storage envelope.
+let historyLeakRejected = false;
+try { notes.assertEnvelopeSealed({ ...env, history: [{ ts: 1, changes: [] }] }); }
+catch { historyLeakRejected = true; }
+if (!historyLeakRejected) { console.error("history should be forbidden on envelope"); process.exit(1); }
+
+const hPrev = notes.normalizeNote({
+  origin: "hist.test", authMethod: "password",
+  label: "Old label", email: "old@example.test", notes: "first draft",
+  tags: ["work"],
+  passwordHint: { length: 10, complexity: "okay" },
+});
+const hNext = notes.normalizeNote({
+  ...hPrev, createdAt: hPrev.createdAt,
+  label: "New label", email: "new@example.test", notes: "second draft",
+  tags: ["work", "banking"],
+  passwordHint: { length: 18, complexity: "strong" },
+}, { now: hPrev.updatedAt + 1_000 });
+const hDiff = notes.diffNoteFields(hPrev, hNext);
+const hFields = hDiff.map((c) => c.field).sort();
+if (!hFields.includes("label") || !hFields.includes("email") || !hFields.includes("notes") || !hFields.includes("tags") || !hFields.includes("passwordHint")) {
+  console.error("diffNoteFields missed a change", hDiff); process.exit(1);
+}
+const pwEntry = hDiff.find((c) => c.field === "passwordHint");
+if (!pwEntry || pwEntry.changed !== true || "from" in pwEntry || "to" in pwEntry) {
+  console.error("passwordHint diff must be opaque", pwEntry); process.exit(1);
+}
+const labelEntry = hDiff.find((c) => c.field === "label");
+if (!labelEntry || labelEntry.from !== "Old label" || labelEntry.to !== "New label") {
+  console.error("label diff wrong", labelEntry); process.exit(1);
+}
+
+// Appending preserves order, caps at HISTORY_MAX, and no-op diffs don't grow.
+let hCurrent = { ...hPrev };
+for (let i = 0; i < 8; i++) {
+  const nextStep = notes.normalizeNote({ ...hCurrent, label: `step-${i}`, createdAt: hPrev.createdAt }, { now: hPrev.updatedAt + 1_000 * (i + 1) });
+  const history = notes.appendNoteHistory(hCurrent, nextStep, { now: nextStep.updatedAt });
+  hCurrent = { ...nextStep, history };
+}
+if (!Array.isArray(hCurrent.history) || hCurrent.history.length !== notes.HISTORY_MAX) {
+  console.error("history did not cap at HISTORY_MAX", hCurrent.history?.length); process.exit(1);
+}
+for (let i = 1; i < hCurrent.history.length; i++) {
+  if (hCurrent.history[i].ts < hCurrent.history[i - 1].ts) {
+    console.error("history not chronologically ordered"); process.exit(1);
+  }
+}
+const noopHistory = notes.appendNoteHistory(hCurrent, hCurrent, { now: hPrev.updatedAt + 9999 });
+if (noopHistory.length !== hCurrent.history.length) {
+  console.error("no-op upsert should not grow history"); process.exit(1);
+}
+
+// normalizeHistory drops forged fields + clips overflow.
+const forgedHist = notes.normalizeHistory([
+  { ts: 1, changes: [{ field: "label", from: "a", to: "b" }, { field: "id", from: "x", to: "y" }] },
+  { ts: 2, changes: [] },
+  { ts: -5, changes: [{ field: "notes", from: "x", to: "y" }] },
+]);
+if (forgedHist.length !== 1 || forgedHist[0].changes.length !== 1 || forgedHist[0].changes[0].field !== "label") {
+  console.error("normalizeHistory wrong", forgedHist); process.exit(1);
+}
+
+// History encrypted at rest: serialize a note with history, ensure no plaintext leakage.
+const histNote = notes.normalizeNote({
+  origin: "sealed.test", authMethod: "password", label: "Sealed",
+  history: hCurrent.history,
+});
+const histEnv = await notes.encryptNote(key, histNote);
+notes.assertEnvelopeSealed(histEnv);
+const histEnvJson = JSON.stringify(histEnv);
+if (histEnvJson.includes("step-") || histEnvJson.includes("history")) {
+  console.error("history leaked into envelope"); process.exit(1);
+}
+const histBack = await notes.decryptNote(key, histEnv);
+if (!Array.isArray(histBack.history) || histBack.history.length !== notes.HISTORY_MAX) {
+  console.error("history did not survive round-trip", histBack.history); process.exit(1);
+}
+
+// Long values get clipped — log can't balloon to 10 KiB.
+const longText = "x".repeat(notes.HISTORY_VALUE_MAX + 200);
+const hLong = notes.diffNoteFields({ notes: "" }, { notes: longText });
+const longEntry = hLong.find((c) => c.field === "notes");
+if (!longEntry || longEntry.to.length > notes.HISTORY_VALUE_MAX + 2) {
+  console.error("long history value not clipped", longEntry?.to?.length); process.exit(1);
+}
+
+const histBg = fs.readFileSync("src/background.js", "utf8");
+if (!histBg.includes('handlers["notes:history"]') || !histBg.includes("appendNoteHistory")) {
+  console.error("background.js missing history wiring"); process.exit(1);
+}
+const histPopupHtml = fs.readFileSync("src/popup.html", "utf8");
+for (const needle of ["match-history", "match-history-list", "match-history-count"]) {
+  if (!histPopupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+const histPopupJs = fs.readFileSync("src/popup.js", "utf8");
+for (const needle of ["renderMatchHistory", "notes:history", "historyFieldLabel"]) {
+  if (!histPopupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+const histPopupCss = fs.readFileSync("src/popup.css", "utf8");
+if (!histPopupCss.includes(".history-block") || !histPopupCss.includes(".history-entry")) {
+  console.error("popup.css missing history styles"); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");

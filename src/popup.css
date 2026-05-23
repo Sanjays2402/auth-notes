@@ -2421,3 +2421,116 @@ body[data-theme="light"] .checklist-score { background: rgba(0, 0, 0, 0.04); bor
 body[data-theme="light"] .checklist-item { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.05); }
 body[data-theme="light"] .checklist-label { color: rgba(20, 24, 36, 0.92); }
 body[data-theme="light"] .checklist-detail { color: rgba(20, 24, 36, 0.6); }
+
+/* --- Per-note edit history (last 5) ----------------------------- */
+.history-block {
+  margin-top: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px) saturate(1.05);
+  -webkit-backdrop-filter: blur(14px) saturate(1.05);
+  overflow: hidden;
+  animation: checklist-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.history-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: background 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.history-summary::-webkit-details-marker { display: none; }
+.history-summary:hover { background: rgba(255, 255, 255, 0.04); }
+.history-summary svg { opacity: 0.85; color: var(--accent); flex-shrink: 0; }
+.history-count {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.5);
+}
+.history-caret {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0.55;
+}
+.history-block[open] .history-caret { transform: rotate(180deg); }
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.history-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.history-when {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: -0.01em;
+}
+.history-rel { color: rgba(255, 255, 255, 0.45); }
+.history-changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.history-change {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+}
+.history-field {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+  min-width: 80px;
+}
+.history-from, .history-to {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.history-from { color: rgba(255, 255, 255, 0.55); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.2); }
+.history-to { color: var(--accent); border-color: rgba(125, 200, 247, 0.18); }
+.history-arrow-icon { opacity: 0.6; flex-shrink: 0; }
+.history-arrow {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+body[data-theme="light"] .history-block { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.06); }
+body[data-theme="light"] .history-summary { color: rgba(20, 24, 36, 0.78); }
+body[data-theme="light"] .history-summary:hover { background: rgba(0, 0, 0, 0.03); }
+body[data-theme="light"] .history-count { color: rgba(20, 24, 36, 0.5); }
+body[data-theme="light"] .history-entry { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.05); }
+body[data-theme="light"] .history-when { color: rgba(20, 24, 36, 0.72); }
+body[data-theme="light"] .history-rel { color: rgba(20, 24, 36, 0.45); }
+body[data-theme="light"] .history-change { color: rgba(20, 24, 36, 0.78); }
+body[data-theme="light"] .history-field { color: rgba(20, 24, 36, 0.92); }
+body[data-theme="light"] .history-from, body[data-theme="light"] .history-to { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.06); }
+body[data-theme="light"] .history-from { color: rgba(20, 24, 36, 0.5); }

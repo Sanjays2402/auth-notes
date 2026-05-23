@@ -23,6 +23,7 @@ import {
   TAG_PRESETS,
   TWOFA_BACKUPS,
   applyBulkTags,
+  appendNoteHistory,
   assertAuditEnvelopeSealed,
   assertEnvelopeSealed,
   auditEnvelopes,
@@ -776,11 +777,32 @@ handlers["notes:upsert"] = async (msg) => {
     ...msg.note,
     createdAt: existing?.createdAt,
   });
+  if (existing) {
+    const history = appendNoteHistory(existing, record, { now: record.updatedAt });
+    if (history.length) record.history = history;
+    else delete record.history;
+  } else {
+    delete record.history;
+  }
   const envelope = await encryptNote(key, record);
   if (existingIdx >= 0) envelopes[existingIdx] = envelope;
   else envelopes.push(envelope);
   await writeEnvelopes(envelopes);
   return record;
+};
+
+handlers["notes:history"] = async (msg) => {
+  const key = requireUnlocked();
+  const id = String(msg?.id || "");
+  if (!id) throw new Error("id is required");
+  const envelopes = await readEnvelopes();
+  const env = envelopes.find((e) => e.id === id);
+  if (!env) return { id, history: [] };
+  let note;
+  try { note = await decryptNote(key, env); }
+  catch { throw new Error("could not decrypt note"); }
+  const history = Array.isArray(note.history) ? note.history : [];
+  return { id, history: history.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0)) };
 };
 
 /**

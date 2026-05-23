@@ -113,6 +113,111 @@ export function bucketForPassword(pw) {
 export const TAG_MAX_COUNT = 12;
 export const TAG_MAX_LEN = 32;
 
+/** How many recent edits we keep per note. The diff log rides inside the
+ *  AES-GCM payload (never the envelope) so older edits stay sealed at rest. */
+export const HISTORY_MAX = 5;
+
+/** Cap on the size of any single from/to value captured in a diff. Anything
+ *  longer is clipped with a trailing ellipsis so a 4 KiB notes body doesn't
+ *  balloon a 5-entry history into 40 KiB of payload. */
+export const HISTORY_VALUE_MAX = 512;
+
+/** Fields whose changes we record in the per-note edit log. The password
+ *  hint, recovery codes and custom fields are intentionally treated as
+ *  opaque "changed" markers in the diff so we never log secret material in
+ *  the from/to fields. */
+export const HISTORY_TRACKED_FIELDS = Object.freeze([
+  "label", "origin", "authMethod", "email",
+  "twofaBackup", "twofaDetail", "notes", "tags",
+  "pinned", "passwordHint", "recoveryCodes", "customFields",
+]);
+
+const HISTORY_OPAQUE_FIELDS = new Set(["passwordHint", "recoveryCodes", "customFields"]);
+
+function _clipForHistory(v) {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    return v.length > HISTORY_VALUE_MAX ? v.slice(0, HISTORY_VALUE_MAX) + "\u2026" : v;
+  }
+  if (Array.isArray(v)) return v.slice(0, TAG_MAX_COUNT).map((x) => _clipForHistory(x));
+  if (typeof v === "object") return v; // opaque branch handles these
+  return v;
+}
+
+function _sameHistoryValue(a, b) {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  try { return JSON.stringify(a) === JSON.stringify(b); }
+  catch { return false; }
+}
+
+/** Diff two note records → array of { field, from, to } changes for the
+ *  subset of fields we track in the edit log. Secret-bearing fields are
+ *  emitted as { field, changed: true } so the log never stores the value. */
+export function diffNoteFields(prev, next) {
+  const a = prev && typeof prev === "object" ? prev : {};
+  const b = next && typeof next === "object" ? next : {};
+  const out = [];
+  for (const f of HISTORY_TRACKED_FIELDS) {
+    const va = a[f];
+    const vb = b[f];
+    if (_sameHistoryValue(va == null ? null : va, vb == null ? null : vb)) continue;
+    if (HISTORY_OPAQUE_FIELDS.has(f)) {
+      out.push({ field: f, changed: true });
+    } else {
+      out.push({ field: f, from: _clipForHistory(va ?? null), to: _clipForHistory(vb ?? null) });
+    }
+  }
+  return out;
+}
+
+/** Sanitize an arbitrary history array (e.g. from an imported payload) so
+ *  forged fields can't ride into storage. Drops entries with no `changes`. */
+export function normalizeHistory(input, { max = HISTORY_MAX } = {}) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  for (const entry of input) {
+    if (!entry || typeof entry !== "object") continue;
+    const ts = Number(entry.ts);
+    if (!Number.isFinite(ts) || ts <= 0) continue;
+    const rawChanges = Array.isArray(entry.changes) ? entry.changes : [];
+    const changes = [];
+    for (const c of rawChanges) {
+      if (!c || typeof c !== "object") continue;
+      const field = String(c.field || "");
+      if (!HISTORY_TRACKED_FIELDS.includes(field)) continue;
+      if (HISTORY_OPAQUE_FIELDS.has(field)) {
+        changes.push({ field, changed: true });
+      } else {
+        changes.push({
+          field,
+          from: _clipForHistory(c.from == null ? null : c.from),
+          to: _clipForHistory(c.to == null ? null : c.to),
+        });
+      }
+    }
+    if (changes.length === 0) continue;
+    out.push({ ts, changes });
+  }
+  out.sort((x, y) => x.ts - y.ts);
+  if (out.length > max) return out.slice(out.length - max);
+  return out;
+}
+
+/** Append a diff entry capturing the prev→next transition to the prior
+ *  note's history. Returns a fresh array bounded to `max` entries; the
+ *  oldest entries roll off FIFO. Returns the prior history unchanged when
+ *  the diff is empty so a no-op upsert doesn't pollute the log. */
+export function appendNoteHistory(prev, next, { now = Date.now(), max = HISTORY_MAX } = {}) {
+  const changes = diffNoteFields(prev || {}, next || {});
+  const existing = normalizeHistory(prev?.history, { max });
+  if (changes.length === 0) return existing;
+  const entry = { ts: Number.isFinite(now) ? now : Date.now(), changes };
+  const out = [...existing, entry];
+  return out.length > max ? out.slice(out.length - max) : out;
+}
+
 /** Hard limits on per-note custom fields (key/value pairs). Custom fields
  *  live inside the encrypted payload (never on the envelope). These caps
  *  guard payload size only; AES-GCM still seals the whole record. */
@@ -364,6 +469,8 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
   if (input.pinned === true || input.pinned === "true" || input.pinned === 1) {
     record.pinned = true;
   }
+  const history = normalizeHistory(input.history);
+  if (history.length) record.history = history;
   if (Number.isFinite(input.deletedAt) && Number(input.deletedAt) > 0) {
     // Clamp to `now` so a forged future timestamp can't keep a note in trash
     // past the 30-day retention window.
@@ -482,6 +589,7 @@ export const ENVELOPE_FORBIDDEN_KEYS = Object.freeze([
   "passwordHint",
   "recoveryCodes",
   "customFields",
+  "history",
   "createdAt",
   "updatedAt",
 ]);

@@ -2090,6 +2090,72 @@ function renderMatch(note, allNotes = []) {
   }
 
   renderSecurityChecklist(note, allNotes);
+  renderMatchHistory(note);
+}
+
+function historyFieldLabel(field) {
+  switch (field) {
+    case "label": return "Label";
+    case "origin": return "Site";
+    case "authMethod": return "Auth method";
+    case "email": return "Email";
+    case "twofaBackup": return "2FA backup";
+    case "twofaDetail": return "2FA detail";
+    case "notes": return "Notes";
+    case "tags": return "Tags";
+    case "pinned": return "Pinned";
+    case "passwordHint": return "Password hint";
+    case "recoveryCodes": return "Recovery codes";
+    case "customFields": return "Custom fields";
+    default: return field;
+  }
+}
+
+function historyValueText(v) {
+  if (v == null || v === "") return "\u2014";
+  if (Array.isArray(v)) return v.length ? v.join(", ") : "\u2014";
+  if (typeof v === "object") return "\u2026";
+  const s = String(v);
+  return s.length > 80 ? s.slice(0, 80) + "\u2026" : s;
+}
+
+async function renderMatchHistory(note) {
+  const root = document.getElementById("match-history");
+  const list = document.getElementById("match-history-list");
+  const count = document.getElementById("match-history-count");
+  if (!root || !list) return;
+  if (!note?.id) { root.hidden = true; list.innerHTML = ""; if (count) count.textContent = ""; return; }
+  let payload;
+  try { payload = await send("notes:history", { id: note.id }); }
+  catch { root.hidden = true; return; }
+  const entries = Array.isArray(payload?.history) ? payload.history : [];
+  if (entries.length === 0) {
+    root.hidden = true;
+    list.innerHTML = "";
+    if (count) count.textContent = "";
+    return;
+  }
+  root.hidden = false;
+  if (count) count.textContent = entries.length === 1 ? "1 edit" : `${entries.length} edits`;
+  list.innerHTML = entries.map((entry) => {
+    const changes = Array.isArray(entry.changes) ? entry.changes : [];
+    const rows = changes.map((c) => {
+      const label = escapeHtml(historyFieldLabel(c.field));
+      if (c.changed) {
+        return `<li class="history-change"><span class="history-field">${label}</span><span class="history-arrow">updated</span></li>`;
+      }
+      const from = escapeHtml(historyValueText(c.from));
+      const to = escapeHtml(historyValueText(c.to));
+      return `<li class="history-change"><span class="history-field">${label}</span>`
+        + `<span class="history-from">${from}</span>`
+        + `<svg class="history-arrow-icon" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>`
+        + `<span class="history-to">${to}</span></li>`;
+    }).join("");
+    return `<li class="history-entry">`
+      + `<div class="history-when">${escapeHtml(formatAuditTime(entry.ts))} <span class="history-rel">\u00b7 ${escapeHtml(formatRelative(entry.ts))}</span></div>`
+      + `<ul class="history-changes">${rows}</ul>`
+      + `</li>`;
+  }).join("");
 }
 
 function renderSecurityChecklist(note, allNotes) {
