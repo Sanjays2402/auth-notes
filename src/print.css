@@ -1,0 +1,205 @@
+/* Print view: paper-friendly. No glass, no blur, no gradient blobs. */
+
+:root {
+  --paper: #ffffff;
+  --ink: #111418;
+  --ink-soft: #4a5159;
+  --ink-faint: #8a9098;
+  --rule: #d8dde2;
+  --rule-soft: #ecf0f3;
+  --accent: #2563eb;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #f5f6f8;
+  color: var(--ink);
+  line-height: 1.45;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 40px 48px;
+  background: var(--paper);
+  min-height: 100vh;
+}
+
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  letter-spacing: -0.015em;
+}
+
+.page-sub {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-head-right {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn {
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  color: var(--ink);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 180ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn:hover { background: #f5f7fa; border-color: #c4cbd2; }
+.btn:focus-visible { outline: 2px solid rgba(37, 99, 235, 0.6); outline-offset: 2px; }
+.btn-ghost { background: transparent; }
+
+.error {
+  padding: 16px 20px;
+  border-radius: 8px;
+  border: 1px solid #e6c4c4;
+  background: #fdf3f3;
+  color: #7a1d1d;
+  font-size: 13px;
+}
+
+.card { display: block; }
+
+.kv {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.kv-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 24px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  page-break-inside: avoid;
+}
+
+.kv-row dt {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  padding-top: 2px;
+}
+
+.kv-row dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.codes, .fields, .attachments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.codes li {
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+  font-size: 13px;
+  background: #f5f6f8;
+  border: 1px solid var(--rule);
+  padding: 4px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.fields { flex-direction: column; gap: 4px; width: 100%; }
+.fields li {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+  font-size: 13px;
+}
+.fields .f-key { color: var(--ink-soft); font-weight: 500; }
+.fields .f-val { color: var(--ink); word-break: break-word; }
+
+.attachments { flex-direction: column; gap: 8px; width: 100%; }
+.attachments li {
+  font-size: 12px;
+  color: var(--ink-soft);
+  padding: 6px 10px;
+  border: 1px dashed var(--rule);
+  border-radius: 6px;
+}
+.attachments img {
+  max-width: 100%;
+  max-height: 220px;
+  display: block;
+  margin-top: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+.prose {
+  white-space: pre-wrap;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.tag-chip {
+  display: inline-block;
+  font-size: 12px;
+  background: #f0f3f7;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-right: 4px;
+  margin-bottom: 4px;
+}
+
+.page-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
+}
+
+@media print {
+  html, body { background: #fff; }
+  .page { box-shadow: none; padding: 0; max-width: none; margin: 0; }
+  .no-print { display: none !important; }
+  .kv-row { border-bottom: 1px solid #d8dde2; }
+  @page { margin: 18mm; }
+}

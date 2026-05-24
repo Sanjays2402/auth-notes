@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auth Notes — Printable</title>
+  <link rel="stylesheet" href="print.css">
+</head>
+<body>
+  <main class="page" id="page">
+    <header class="page-head">
+      <div class="page-head-left">
+        <h1 class="page-title" id="note-label">Auth note</h1>
+        <p class="page-sub" id="note-origin"></p>
+      </div>
+      <div class="page-head-right no-print">
+        <button type="button" id="print-btn" class="btn">Print</button>
+        <button type="button" id="close-btn" class="btn btn-ghost">Close</button>
+      </div>
+    </header>
+
+    <section class="error" id="error" hidden></section>
+
+    <section class="card" id="content" hidden>
+      <dl class="kv">
+        <div class="kv-row" id="row-auth" hidden>
+          <dt>Auth method</dt>
+          <dd id="val-auth"></dd>
+        </div>
+        <div class="kv-row" id="row-email" hidden>
+          <dt>Email used</dt>
+          <dd id="val-email"></dd>
+        </div>
+        <div class="kv-row" id="row-2fa" hidden>
+          <dt>2FA backup</dt>
+          <dd id="val-2fa"></dd>
+        </div>
+        <div class="kv-row" id="row-pw" hidden>
+          <dt>Password hint</dt>
+          <dd id="val-pw"></dd>
+        </div>
+        <div class="kv-row" id="row-tags" hidden>
+          <dt>Tags</dt>
+          <dd id="val-tags"></dd>
+        </div>
+        <div class="kv-row" id="row-codes" hidden>
+          <dt>Recovery codes</dt>
+          <dd><ul id="val-codes" class="codes"></ul></dd>
+        </div>
+        <div class="kv-row" id="row-fields" hidden>
+          <dt>Custom fields</dt>
+          <dd><ul id="val-fields" class="fields"></ul></dd>
+        </div>
+        <div class="kv-row" id="row-notes" hidden>
+          <dt>Notes</dt>
+          <dd id="val-notes" class="prose"></dd>
+        </div>
+        <div class="kv-row" id="row-attachments" hidden>
+          <dt>Attachments</dt>
+          <dd><ul id="val-attachments" class="attachments"></ul></dd>
+        </div>
+      </dl>
+      <footer class="page-foot">
+        <span id="foot-dates"></span>
+        <span class="page-foot-app">Auth Notes</span>
+      </footer>
+    </section>
+  </main>
+  <script type="module" src="print.js"></script>
+</body>
+</html>

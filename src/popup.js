@@ -1992,6 +1992,16 @@ function bindQuickAdd() {
 
   const editBtn = document.getElementById("match-edit");
   editBtn?.addEventListener("click", () => startQuickAddFromCurrentTab());
+  const printBtn = document.getElementById("match-print");
+  printBtn?.addEventListener("click", async () => {
+    if (!currentMatchNote?.id) return;
+    try {
+      const url = chrome.runtime.getURL(`src/print.html?id=${encodeURIComponent(currentMatchNote.id)}`);
+      await chrome.tabs.create({ url });
+    } catch (err) {
+      console.warn("[auth-notes] print open failed", err);
+    }
+  });
   const pinBtn = document.getElementById("match-pin");
   pinBtn?.addEventListener("click", async () => {
     if (!currentMatchNote?.id) return;
