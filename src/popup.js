@@ -1346,17 +1346,51 @@ async function refreshTagRail() {
     rail.hidden = true;
     return;
   }
-  const tags = Array.isArray(data?.tags) ? data.tags : [];
-  if (tags.length === 0) {
+  let favorites = [];
+  try {
+    const settings = await send("settings:get");
+    favorites = Array.isArray(settings?.favoriteTags) ? settings.favoriteTags : [];
+  } catch { /* not unlocked or asleep — fall back to no favorites */ }
+
+  const tagCounts = new Map();
+  for (const { tag, count } of (Array.isArray(data?.tags) ? data.tags : [])) {
+    tagCounts.set(tag, count);
+  }
+
+  // Favorites always render, in user-chosen order, even if count=0. Then the
+  // rest fill in by frequency. Cap the total so the rail stays tidy.
+  const seen = new Set();
+  const ordered = [];
+  for (const t of favorites) {
+    if (seen.has(t)) continue;
+    seen.add(t);
+    ordered.push({ tag: t, count: tagCounts.get(t) || 0, favorite: true });
+  }
+  for (const { tag, count } of (Array.isArray(data?.tags) ? data.tags : [])) {
+    if (seen.has(tag)) continue;
+    seen.add(tag);
+    ordered.push({ tag, count, favorite: false });
+  }
+  const visible = ordered.slice(0, 18);
+  if (visible.length === 0) {
     rail.hidden = true;
     rail.innerHTML = "";
     return;
   }
   const active = parseTagTokens(input?.value || "");
   rail.hidden = false;
-  rail.innerHTML = tags.slice(0, 16).map(({ tag, count }) => {
+  rail.innerHTML = visible.map(({ tag, count, favorite }) => {
     const on = active.has(tag);
-    return `<button type="button" class="tag-chip tag-chip-btn${on ? " is-active" : ""}" data-tag="${escapeHtml(tag)}" aria-pressed="${on ? "true" : "false"}"><span>${escapeHtml(tag)}</span><span class="tag-chip-count">${count}</span></button>`;
+    const safe = escapeHtml(tag);
+    const star = favorite
+      ? `<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.5 6 .7-4.4 4.2 1.2 5.9L12 16.9 6.6 19.8l1.2-5.9L3.4 9.7l6-.7z"/></svg>`
+      : `<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.5 6 .7-4.4 4.2 1.2 5.9L12 16.9 6.6 19.8l1.2-5.9L3.4 9.7l6-.7z"/></svg>`;
+    return `<span class="tag-rail-item${favorite ? " is-favorite" : ""}">`
+      + `<button type="button" class="tag-chip tag-chip-btn${on ? " is-active" : ""}" data-tag="${safe}" aria-pressed="${on ? "true" : "false"}">`
+      + `<span>${safe}</span><span class="tag-chip-count">${count}</span>`
+      + `</button>`
+      + `<button type="button" class="tag-fav-btn" data-tag="${safe}" data-favorite="${favorite ? "true" : "false"}" aria-pressed="${favorite ? "true" : "false"}" title="${favorite ? "Unpin" : "Pin to filter bar"}" aria-label="${favorite ? "Unpin" : "Pin"} tag ${safe}">${star}</button>`
+      + `</span>`;
   }).join("");
   for (const btn of rail.querySelectorAll(".tag-chip-btn")) {
     btn.addEventListener("click", () => {
@@ -1368,6 +1402,24 @@ async function refreshTagRail() {
       if (clearBtn) clearBtn.hidden = !input.value;
       refreshTagRail();
       runSearch(input.value);
+    });
+  }
+  for (const btn of rail.querySelectorAll(".tag-fav-btn")) {
+    btn.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const tag = btn.dataset.tag;
+      if (!tag) return;
+      const isFav = btn.dataset.favorite === "true";
+      try {
+        const cur = await send("settings:get");
+        const list = Array.isArray(cur?.favoriteTags) ? cur.favoriteTags.slice() : [];
+        const next = isFav ? list.filter((t) => t !== tag) : list.concat([tag]);
+        await send("settings:set", { settings: { favoriteTags: next } });
+      } catch (err) {
+        console.warn("[auth-notes] favorite toggle failed", err);
+      }
+      refreshTagRail();
     });
   }
 }

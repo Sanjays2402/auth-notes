@@ -80,7 +80,11 @@ const DEFAULT_SETTINGS = Object.freeze({
   // Auto-fill is OFF by default. The user must opt in from the options page
   // before any note data leaves the popup process for the active tab.
   autofillEnabled: false,
+  // Tags the user pinned to the front of the filter bar. Always rendered,
+  // even when no current note carries them.
+  favoriteTags: [],
 });
+const FAVORITE_TAGS_MAX = 12;
 
 // In-memory only. Never persisted. Cleared on SW termination or lock.
 let unlockedKey = null;
@@ -145,6 +149,20 @@ function sanitizeSettings(patch) {
   }
   if (patch && patch.autofillEnabled !== undefined) {
     out.autofillEnabled = !!patch.autofillEnabled;
+  }
+  if (patch && patch.favoriteTags !== undefined) {
+    const raw = patch.favoriteTags;
+    const list = normalizeTags(Array.isArray(raw) ? raw : String(raw || ""));
+    // De-dup while preserving the user's insertion order so the bar stays stable.
+    const seen = new Set();
+    const ordered = [];
+    for (const t of list) {
+      if (seen.has(t)) continue;
+      seen.add(t);
+      ordered.push(t);
+      if (ordered.length >= FAVORITE_TAGS_MAX) break;
+    }
+    out.favoriteTags = ordered;
   }
   if (patch && patch.pbkdf2Iterations !== undefined) {
     const n = Math.floor(Number(patch.pbkdf2Iterations));
