@@ -697,16 +697,48 @@ handlers["notes:expiring"] = async () => {
   return { now, items, counts };
 };
 
-handlers["backup:export"] = async () => {
+handlers["backup:export"] = async (msg) => {
   // Vault must be unlocked so the user has just proven they hold the master
   // password — this prevents drive-by extensions / pages from prompting an
   // export of opaque-but-recoverable ciphertext.
-  requireUnlocked();
+  const key = requireUnlocked();
   const auth = await readAuth();
   if (!auth) throw new Error("master password not set");
-  const envelopes = await readEnvelopes();
+  const rawEnvelopes = await readEnvelopes();
   // Defense in depth: refuse to export anything that isn't fully sealed.
-  for (const env of envelopes) assertEnvelopeSealed(env);
+  for (const env of rawEnvelopes) assertEnvelopeSealed(env);
+
+  // Selective scope: when the caller passes a non-empty `tags` array we
+  // decrypt each envelope, keep only the notes whose tag set intersects the
+  // requested scope, and drop trashed ones. The envelope itself is sealed
+  // (tags aren't plaintext) so the filter must happen in-process.
+  const requestedTags = Array.isArray(msg?.tags)
+    ? Array.from(new Set(
+        msg.tags
+          .map((t) => normalizeTag(t))
+          .filter((t) => typeof t === "string" && t.length > 0),
+      ))
+    : [];
+
+  let envelopes = rawEnvelopes;
+  let scope = "all";
+  if (requestedTags.length > 0) {
+    scope = `tags:${requestedTags.join(",")}`;
+    const wanted = new Set(requestedTags);
+    const filtered = [];
+    for (const env of rawEnvelopes) {
+      try {
+        const note = await decryptNote(key, env);
+        if (isTrashed(note)) continue;
+        const tags = Array.isArray(note.tags) ? note.tags : [];
+        if (tags.some((t) => wanted.has(t))) filtered.push(env);
+      } catch (err) {
+        console.warn("[auth-notes] skip undecryptable note in scoped export", env.id, err);
+      }
+    }
+    envelopes = filtered;
+  }
+
   const payload = {
     format: BACKUP_FORMAT,
     schema: BACKUP_SCHEMA,
@@ -715,15 +747,23 @@ handlers["backup:export"] = async () => {
     auth,
     envelopes,
   };
+  if (requestedTags.length > 0) payload.scope = { tags: requestedTags };
   const json = JSON.stringify(payload, null, 2);
   const ts = new Date(payload.exportedAt).toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  await recordAuditEvent({ type: "backup:export", detail: `${envelopes.length} notes` });
+  const slug = requestedTags.length > 0
+    ? `-${requestedTags.slice(0, 3).join("-").replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "scoped"}`
+    : "";
+  await recordAuditEvent({
+    type: "backup:export",
+    detail: `${envelopes.length} notes (${scope})`,
+  });
   return {
-    filename: `auth-notes-backup-${ts}.json.enc`,
+    filename: `auth-notes-backup-${ts}${slug}.json.enc`,
     mime: "application/octet-stream",
     content: json,
     count: envelopes.length,
     exportedAt: payload.exportedAt,
+    scope: requestedTags.length > 0 ? { tags: requestedTags } : null,
   };
 };
 

@@ -201,6 +201,7 @@ async function openSettings() {
   } catch (err) {
     console.warn("[auth-notes] settings:get failed", err);
   }
+  refreshExportScope();
 }
 
 function bindSettings() {
@@ -393,12 +394,16 @@ function bindExport() {
     );
     btn.disabled = true;
     btn.classList.add("is-busy");
-    setExportStatus("Preparing backup\u2026");
+    const tags = Array.from(exportScopeTags);
+    setExportStatus(tags.length ? "Preparing scoped backup\u2026" : "Preparing backup\u2026");
     try {
-      const data = await send("backup:export");
+      const data = await send("backup:export", tags.length ? { tags } : {});
       triggerDownload(data.filename, data.content, data.mime);
       const n = Number(data.count) || 0;
-      setExportStatus(`Saved \u2014 ${n} note${n === 1 ? "" : "s"} sealed.`, "ok");
+      const scopeHint = tags.length
+        ? ` (scope: ${tags.slice(0, 3).join(", ")}${tags.length > 3 ? "\u2026" : ""})`
+        : "";
+      setExportStatus(`Saved \u2014 ${n} note${n === 1 ? "" : "s"} sealed${scopeHint}.`, "ok");
       clearTimeout(bindExport._t);
       bindExport._t = setTimeout(() => setExportStatus(""), 3200);
     } catch (err) {
@@ -409,6 +414,81 @@ function bindExport() {
       btn.classList.remove("is-busy");
     }
   });
+}
+
+// --- Selective export scope (by tag) --------------------------------
+
+const exportScopeTags = new Set();
+
+function updateExportScopeSummary(totalTags) {
+  const summary = document.getElementById("export-scope-summary");
+  if (!summary) return;
+  if (exportScopeTags.size === 0) {
+    summary.textContent = totalTags > 0 ? "All notes" : "All notes";
+    summary.removeAttribute("data-active");
+    return;
+  }
+  const list = Array.from(exportScopeTags);
+  const head = list.slice(0, 3).join(", ");
+  summary.textContent = list.length > 3 ? `${head}, +${list.length - 3} more` : head;
+  summary.setAttribute("data-active", "true");
+}
+
+async function refreshExportScope() {
+  const wrap = document.getElementById("export-scope");
+  const chips = document.getElementById("export-scope-chips");
+  const empty = document.getElementById("export-scope-empty");
+  if (!wrap || !chips) return;
+  let data;
+  try { data = await send("notes:tags"); }
+  catch (err) {
+    console.warn("[auth-notes] export scope tags failed", err);
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  const tagList = Array.isArray(data?.tags) ? data.tags : [];
+  // Prune any selected tags that no longer exist.
+  const existing = new Set(tagList.map((t) => t.tag));
+  for (const t of Array.from(exportScopeTags)) {
+    if (!existing.has(t)) exportScopeTags.delete(t);
+  }
+  if (tagList.length === 0) {
+    chips.innerHTML = "";
+    if (empty) empty.hidden = false;
+    updateExportScopeSummary(0);
+    return;
+  }
+  if (empty) empty.hidden = true;
+  const html = [
+    `<button type="button" class="export-scope-chip${exportScopeTags.size === 0 ? " is-active" : ""}" data-scope-tag="" aria-pressed="${exportScopeTags.size === 0 ? "true" : "false"}">`
+      + `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>`
+      + `<span>All</span></button>`,
+  ];
+  for (const { tag, count } of tagList) {
+    const safe = escapeHtml(tag);
+    const on = exportScopeTags.has(tag);
+    html.push(
+      `<button type="button" class="export-scope-chip${on ? " is-active" : ""}" data-scope-tag="${safe}" aria-pressed="${on ? "true" : "false"}">`
+        + `<span>${safe}</span><span class="export-scope-chip-count">${count}</span>`
+        + `</button>`,
+    );
+  }
+  chips.innerHTML = html.join("");
+  for (const btn of chips.querySelectorAll(".export-scope-chip")) {
+    btn.addEventListener("click", () => {
+      const tag = btn.getAttribute("data-scope-tag") || "";
+      if (!tag) {
+        exportScopeTags.clear();
+      } else if (exportScopeTags.has(tag)) {
+        exportScopeTags.delete(tag);
+      } else {
+        exportScopeTags.add(tag);
+      }
+      refreshExportScope();
+    });
+  }
+  updateExportScopeSummary(tagList.length);
 }
 
 // --- Encrypted backup import ----------------------------------------
