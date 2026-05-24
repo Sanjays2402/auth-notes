@@ -43,7 +43,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Per-site notes printable view (paper-friendly, no glass)
 - [x] Inline QR code generator for 2FA backup URIs (offline)
 - [x] Per-note expiry reminder with badge notification
-- [ ] Right-click context menu to add note for current page
+- [x] Right-click context menu to add note for current page
 - [ ] Sticky favorite tags pinned in filter bar
 - [ ] Encrypted JSON export with selective tag scope
 - [ ] Per-site reused-password warning chip (length + bucket match)

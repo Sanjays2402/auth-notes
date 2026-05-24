@@ -1043,4 +1043,27 @@ if (!qrPopupCss.includes(".qr-canvas") || !qrPopupCss.includes(".qr-head")) {
   console.error("popup.css missing qr styles"); process.exit(1);
 }
 
+// --- Right-click context menu “Add to Auth Notes…” -----------------
+const ctxManifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+if (!Array.isArray(ctxManifest.permissions) || !ctxManifest.permissions.includes("contextMenus")) {
+  console.error("manifest missing 'contextMenus' permission"); process.exit(1);
+}
+const ctxBgSrc = fs.readFileSync("src/background.js", "utf8");
+for (const needle of [
+  "chrome.contextMenus",
+  "ensureContextMenus",
+  "an:add-note",
+  "Add to Auth Notes",
+  "quickAdd:consumePending",
+  "quickAdd:peekPending",
+  "readPendingQuickAdd",
+  "setPendingQuickAdd",
+]) {
+  if (!ctxBgSrc.includes(needle)) { console.error("background.js missing context-menu wiring:", needle); process.exit(1); }
+}
+const ctxPopupSrc = fs.readFileSync("src/popup.js", "utf8");
+for (const needle of ["maybeHandlePendingQuickAdd", "quickAdd:consumePending"]) {
+  if (!ctxPopupSrc.includes(needle)) { console.error("popup.js missing pending quick-add consumer:", needle); process.exit(1); }
+}
+
 console.log("\u2713 smoke ok");

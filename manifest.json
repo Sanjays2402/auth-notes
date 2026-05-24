@@ -8,7 +8,8 @@
     "activeTab",
     "alarms",
     "favicon",
-    "scripting"
+    "scripting",
+    "contextMenus"
   ],
   "host_permissions": [],
   "action": {

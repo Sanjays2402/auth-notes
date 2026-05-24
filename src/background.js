@@ -220,6 +220,7 @@ chrome.alarms?.onAlarm.addListener(async (alarm) => {
 chrome.runtime.onInstalled.addListener(async (details) => {
   try {
     await ensureMeta();
+    await ensureContextMenus();
     console.log(`[auth-notes] installed (${details.reason}) v${VERSION}`);
   } catch (err) {
     console.error("[auth-notes] install bootstrap failed", err);
@@ -230,8 +231,140 @@ chrome.runtime.onStartup?.addListener(() => {
   // SW restart implies prior unlocked key is gone. Stay locked.
   unlockedKey = null;
   try { chrome.action?.setBadgeText?.({ text: "" }); } catch { /* noop */ }
+  // Context menu entries don't persist across SW lifecycles — re-register.
+  ensureContextMenus().catch((err) => console.warn("[auth-notes] context-menu boot failed", err));
   console.log(`[auth-notes] startup v${VERSION}`);
 });
+
+// --- Right-click “Add to Auth Notes…” ---------------------------------
+//
+// Registers a single page/link/selection-scoped context-menu item that
+// hands the popup a one-shot “quick-add prefill” intent for the page
+// (or link) the user right-clicked on. The intent rides in
+// `chrome.storage.session` so it never touches disk and clears on browser
+// restart; the popup consumes it via the `quickAdd:consumePending` handler
+// below, which deletes the record before returning so a stale intent can
+// never replay.
+const CONTEXT_MENU_ID = "an:add-note";
+const PENDING_QUICK_ADD_KEY = "an:pending-quick-add";
+const PENDING_QUICK_ADD_TTL_MS = 60_000;
+
+async function ensureContextMenus() {
+  if (!chrome.contextMenus?.create) return;
+  // Removing first guards against `Duplicate id` errors on SW restart when
+  // the entry is already registered for the current profile.
+  await new Promise((resolve) => {
+    try { chrome.contextMenus.removeAll(() => resolve()); }
+    catch { resolve(); }
+  });
+  await new Promise((resolve) => {
+    try {
+      chrome.contextMenus.create({
+        id: CONTEXT_MENU_ID,
+        title: "Add to Auth Notes\u2026",
+        contexts: ["page", "link", "selection", "frame"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+      }, () => {
+        // chrome.runtime.lastError swallowed — the create is idempotent and
+        // any real failure is logged but should not crash the SW.
+        if (chrome.runtime.lastError) {
+          console.warn("[auth-notes] contextMenus.create:", chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
+    } catch (err) {
+      console.warn("[auth-notes] contextMenus.create threw", err);
+      resolve();
+    }
+  });
+}
+
+function originFromContextInfo(info, tab) {
+  // Prefer the link target when the user right-clicked an anchor: that’s
+  // almost always the site they want to record a note for. Fall back to
+  // the surrounding page, then to the tab’s URL.
+  const candidates = [info?.linkUrl, info?.frameUrl, info?.pageUrl, tab?.url];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== "http:" && u.protocol !== "https:") continue;
+      if (!u.hostname) continue;
+      return u.hostname.toLowerCase();
+    } catch { /* try next */ }
+  }
+  return "";
+}
+
+async function setPendingQuickAdd(origin, source) {
+  if (!origin) return;
+  const payload = { origin, source: source || "context-menu", ts: Date.now() };
+  try {
+    if (chrome.storage?.session?.set) {
+      await chrome.storage.session.set({ [PENDING_QUICK_ADD_KEY]: payload });
+    } else {
+      // Fallback for environments without storage.session — the popup will
+      // still consume + clear the entry on read.
+      await chrome.storage.local.set({ [PENDING_QUICK_ADD_KEY]: payload });
+    }
+  } catch (err) {
+    console.warn("[auth-notes] setPendingQuickAdd failed", err);
+  }
+}
+
+async function readPendingQuickAdd() {
+  try {
+    const area = chrome.storage?.session?.get ? chrome.storage.session : chrome.storage.local;
+    const got = await area.get(PENDING_QUICK_ADD_KEY);
+    const v = got?.[PENDING_QUICK_ADD_KEY];
+    if (!v || typeof v !== "object") return null;
+    if (!v.origin || (Date.now() - Number(v.ts || 0)) > PENDING_QUICK_ADD_TTL_MS) {
+      try { await area.remove(PENDING_QUICK_ADD_KEY); } catch { /* noop */ }
+      return null;
+    }
+    return v;
+  } catch (err) {
+    console.warn("[auth-notes] readPendingQuickAdd failed", err);
+    return null;
+  }
+}
+
+async function clearPendingQuickAdd() {
+  try {
+    const area = chrome.storage?.session?.remove ? chrome.storage.session : chrome.storage.local;
+    await area.remove(PENDING_QUICK_ADD_KEY);
+  } catch { /* noop */ }
+}
+
+chrome.contextMenus?.onClicked?.addListener(async (info, tab) => {
+  if (!info || info.menuItemId !== CONTEXT_MENU_ID) return;
+  const origin = originFromContextInfo(info, tab);
+  if (!origin) {
+    console.warn("[auth-notes] context-menu click had no usable origin");
+    return;
+  }
+  await setPendingQuickAdd(origin, info.linkUrl ? "link" : "page");
+  // Best-effort: pop the action open immediately so the user sees the
+  // quick-add form. `openPopup()` requires a user gesture, which a
+  // context-menu click counts as on Chrome 127+. Older builds will throw
+  // — in that case the pending intent stays primed and is consumed the
+  // next time the user opens the popup themselves.
+  try {
+    if (chrome.action?.openPopup) await chrome.action.openPopup();
+  } catch (err) {
+    console.warn("[auth-notes] openPopup fallback (intent queued):", err?.message || err);
+  }
+});
+
+handlers["quickAdd:peekPending"] = async () => {
+  return (await readPendingQuickAdd()) || { origin: "" };
+};
+
+handlers["quickAdd:consumePending"] = async () => {
+  const pending = await readPendingQuickAdd();
+  await clearPendingQuickAdd();
+  return pending || { origin: "" };
+};
 
 // Message router — features dispatch here by `type`. Always responds
 // asynchronously with `{ ok, data?, error? }`.

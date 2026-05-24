@@ -3063,8 +3063,33 @@ async function maybeStartOnboardingTour(opts) {
   }
 }
 
-async function route() {
+async function maybeHandlePendingQuickAdd() {
+  // Consumes a pending quick-add intent dropped by the right-click context
+  // menu (background.js). The consume RPC clears the record server-side so a
+  // single click can only ever open one quick-add form. If there is no
+  // existing note for that origin we open the quick-add view prefilled;
+  // when a match already exists we open that note in edit mode instead so
+  // the user isn't tricked into creating a duplicate.
   try {
+    const pending = await send("quickAdd:consumePending");
+    const origin = String(pending?.origin || "").toLowerCase();
+    if (!origin) return;
+    let matches = [];
+    try {
+      const res = await send("notes:list", { origin });
+      if (Array.isArray(res)) matches = res;
+    } catch { /* fall through to fresh quick-add */ }
+    if (matches.length > 0) {
+      await openQuickAdd({ note: matches[0] });
+    } else {
+      await openQuickAdd({ prefillOrigin: origin });
+    }
+  } catch (err) {
+    console.warn("[auth-notes] pending quick-add consume failed", err);
+  }
+}
+
+async function route() {  try {
     const status = await send("master:status");
     if (!status.hasMaster) { show("view-setup"); return; }
     if (status.locked) {
@@ -3074,6 +3099,7 @@ async function route() {
       return;
     }
     show("view-vault");
+    await maybeHandlePendingQuickAdd();
     await refreshCurrentSite();
     maybeStartOnboardingTour();
   } catch (err) {
