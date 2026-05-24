@@ -1014,4 +1014,33 @@ if (!healthPopupCss.includes(".stats-health") || !healthPopupCss.includes(".stat
   console.error("popup.css missing health styles"); process.exit(1);
 }
 
+// --- Inline QR for 2FA backup URIs (offline) ----------------------
+const qr = await import("../src/qr.js");
+if (typeof qr.extractOtpauthUri !== "function" || typeof qr.qrToSvg !== "function") {
+  console.error("qr module missing exports"); process.exit(1);
+}
+if (qr.extractOtpauthUri("hello world") !== null) { console.error("extractOtpauthUri false-positive"); process.exit(1); }
+const sampleUri = "otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example";
+const extracted = qr.extractOtpauthUri(`enroll: ${sampleUri}.`);
+if (extracted !== sampleUri) { console.error("extractOtpauthUri wrong", extracted); process.exit(1); }
+const svg = qr.qrToSvg(sampleUri, { ecc: "M", border: 2 });
+if (!svg.startsWith("<svg") || !svg.includes("viewBox=") || !svg.includes("<path d=\"")) {
+  console.error("qrToSvg malformed svg"); process.exit(1);
+}
+let qrThrew = false;
+try { qr.qrToSvg(""); } catch { qrThrew = true; }
+if (!qrThrew) { console.error("qrToSvg should reject empty"); process.exit(1); }
+const qrPopupHtml = fs.readFileSync("src/popup.html", "utf8");
+for (const needle of ["match-row-qr", "match-qr-canvas", "match-qr-toggle"]) {
+  if (!qrPopupHtml.includes(needle)) { console.error("popup.html missing", needle); process.exit(1); }
+}
+const qrPopupJs = fs.readFileSync("src/popup.js", "utf8");
+for (const needle of ["renderMatchQr", "bindMatchQrToggle", "extractOtpauthUri", "qrToSvg"]) {
+  if (!qrPopupJs.includes(needle)) { console.error("popup.js missing", needle); process.exit(1); }
+}
+const qrPopupCss = fs.readFileSync("src/popup.css", "utf8");
+if (!qrPopupCss.includes(".qr-canvas") || !qrPopupCss.includes(".qr-head")) {
+  console.error("popup.css missing qr styles"); process.exit(1);
+}
+
 console.log("\u2713 smoke ok");

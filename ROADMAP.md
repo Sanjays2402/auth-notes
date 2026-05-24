@@ -41,7 +41,7 @@ This file is the agent's task queue. Unchecked items get implemented in order. W
 - [x] Quick lock keyboard shortcut (Cmd/Ctrl+Shift+L)
 - [x] Vault health score with weighted security signals
 - [x] Per-site notes printable view (paper-friendly, no glass)
-- [ ] Inline QR code generator for 2FA backup URIs (offline)
+- [x] Inline QR code generator for 2FA backup URIs (offline)
 - [ ] Per-note expiry reminder with badge notification
 - [ ] Right-click context menu to add note for current page
 - [ ] Sticky favorite tags pinned in filter bar

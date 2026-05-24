@@ -2,6 +2,7 @@
 
 import { renderMarkdown, markdownToText } from "./markdown.js";
 import { computeSecurityChecklist } from "./notes.js";
+import { extractOtpauthUri, qrToSvg } from "./qr.js";
 
 const THEME_MEDIA = window.matchMedia("(prefers-color-scheme: light)");
 let themePref = "auto"; // "auto" | "dark" | "light"
@@ -1724,6 +1725,95 @@ function collectQuickCustomFields() {
   return out;
 }
 
+// Collect candidate OTP URIs from a decrypted note. We probe the `twofaDetail`
+// field first (the obvious place users paste them) and then fall back to the
+// freeform `notes` body so a URI dropped into the markdown still produces a
+// scannable QR. Returns the first match or `null`.
+function findNoteOtpauthUri(note) {
+  if (!note || typeof note !== "object") return null;
+  const candidates = [note.twofaDetail, note.notes];
+  for (const blob of candidates) {
+    const hit = extractOtpauthUri(blob || "");
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Best-effort label for the QR — `Issuer` if present in the OTP URI, otherwise
+// the URI's label segment. Falls back to a generic string. Kept terse so the
+// row stays compact next to the 2FA backup chip.
+function otpauthQrLabel(uri) {
+  try {
+    const u = new URL(uri);
+    const issuer = u.searchParams.get("issuer");
+    if (issuer) return decodeURIComponent(issuer);
+    const path = decodeURIComponent(u.pathname.replace(/^\//, ""));
+    if (path) return path;
+  } catch { /* fall through */ }
+  return "Authenticator URI";
+}
+
+function renderMatchQr(note) {
+  const row = document.getElementById("match-row-qr");
+  const canvas = document.getElementById("match-qr-canvas");
+  const toggle = document.getElementById("match-qr-toggle");
+  const toggleLabel = document.getElementById("match-qr-toggle-label");
+  const labelEl = document.getElementById("match-qr-label");
+  if (!row || !canvas || !toggle) return;
+  const uri = findNoteOtpauthUri(note);
+  if (!uri) {
+    row.hidden = true;
+    canvas.hidden = true;
+    canvas.innerHTML = "";
+    toggle.setAttribute("aria-expanded", "false");
+    if (toggleLabel) toggleLabel.textContent = "Show QR";
+    return;
+  }
+  row.hidden = false;
+  canvas.hidden = true;
+  canvas.innerHTML = "";
+  toggle.setAttribute("aria-expanded", "false");
+  if (toggleLabel) toggleLabel.textContent = "Show QR";
+  if (labelEl) labelEl.textContent = otpauthQrLabel(uri);
+  // Cache the resolved URI on the toggle so the listener (bound once at
+  // startup) can read it back without keeping a closure over `note`.
+  toggle.dataset.qrUri = uri;
+}
+
+function bindMatchQrToggle() {
+  const toggle = document.getElementById("match-qr-toggle");
+  const canvas = document.getElementById("match-qr-canvas");
+  const toggleLabel = document.getElementById("match-qr-toggle-label");
+  if (!toggle || !canvas) return;
+  toggle.addEventListener("click", () => {
+    const uri = toggle.dataset.qrUri || "";
+    if (!uri) return;
+    const isOpen = !canvas.hidden;
+    if (isOpen) {
+      canvas.hidden = true;
+      canvas.innerHTML = "";
+      canvas.setAttribute("aria-hidden", "true");
+      toggle.setAttribute("aria-expanded", "false");
+      if (toggleLabel) toggleLabel.textContent = "Show QR";
+      return;
+    }
+    try {
+      // ECC "M" is the AGA-recommended default for authenticator URIs: low
+      // enough that long issuer strings still fit in v1-3, high enough to
+      // survive minor camera noise on a phone screen.
+      canvas.innerHTML = qrToSvg(uri, { ecc: "M", border: 2 });
+      canvas.hidden = false;
+      canvas.setAttribute("aria-hidden", "false");
+      toggle.setAttribute("aria-expanded", "true");
+      if (toggleLabel) toggleLabel.textContent = "Hide QR";
+    } catch (err) {
+      console.warn("qr render failed", err);
+      canvas.innerHTML = `<div class="qr-error">Couldn’t render this URI.</div>`;
+      canvas.hidden = false;
+    }
+  });
+}
+
 function renderMatchCustomFields(fields) {
   const row = document.getElementById("match-row-fields");
   const list = document.getElementById("match-fields-list");
@@ -2252,6 +2342,7 @@ function renderMatch(note, allNotes = []) {
     ? (note.twofaDetail ? `${prettyBackup(note.twofaBackup)} — ${note.twofaDetail}` : prettyBackup(note.twofaBackup))
     : "";
   showRow("match-row-2fa", "match-2fa", twofa);
+  renderMatchQr(note);
   showRow("match-row-pw", "match-pw", formatPasswordHint(note.passwordHint));
   // Render the freeform note body as sanitized markdown. We treat the row as
   // hidden whenever the body has no visible content after stripping syntax,
@@ -2935,6 +3026,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindSearch();
   bindBulkEditor();
   bindQuickAdd();
+  bindMatchQrToggle();
 
   const lockBtn = document.getElementById("lock-btn");
   lockBtn?.addEventListener("click", () => {
