@@ -30,11 +30,13 @@ import {
   collectTags,
   computeVaultStats,
   computeVaultHealth,
+  countExpiringNotes,
   decodeBackupContent,
   decryptAuditEvent,
   decryptNote,
   encryptAuditEvent,
   encryptNote,
+  expiryStatus,
   findDuplicateEmails,
   isTrashed,
   normalizeAuditEvent,
@@ -181,6 +183,17 @@ async function scheduleAutoLockAlarm() {
   chrome.alarms?.create?.(ALARM_AUTO_LOCK, { periodInMinutes: 1, delayInMinutes: 1 });
 }
 
+// Hourly tick keeps the expiry badge fresh so a note whose expiresAt rolls
+// into `due` overnight still surfaces a red badge even if the user hasn't
+// touched the popup since.
+function scheduleExpiryBadgeAlarm() {
+  try {
+    chrome.alarms?.create?.(ALARM_EXPIRY_BADGE, { periodInMinutes: 60, delayInMinutes: 60 });
+  } catch (err) {
+    console.warn("[auth-notes] schedule expiry alarm failed", err);
+  }
+}
+
 async function performAutoLock(reason = "idle") {
   if (!unlockedKey) return;
   // Record the auto-lock while we still hold the key, so the entry can be
@@ -216,6 +229,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup?.addListener(() => {
   // SW restart implies prior unlocked key is gone. Stay locked.
   unlockedKey = null;
+  try { chrome.action?.setBadgeText?.({ text: "" }); } catch { /* noop */ }
   console.log(`[auth-notes] startup v${VERSION}`);
 });
 
@@ -459,7 +473,78 @@ async function writeEnvelopes(envelopes) {
   // Any envelope containing plaintext sensitive fields is rejected before write.
   for (const env of envelopes) assertEnvelopeSealed(env);
   await chrome.storage.local.set({ [STORAGE_KEY_NOTES]: envelopes });
+  try { await refreshExpiryBadge(); }
+  catch (err) { console.warn("[auth-notes] badge refresh failed", err); }
 }
+
+// --- Expiry reminder badge ---------------------------------------------
+//
+// Scans all decrypted notes for upcoming/lapsed expiry stamps and paints the
+// browser-action badge with the combined count. Runs only while the vault is
+// unlocked — we can't decrypt envelopes otherwise, and surfacing a count
+// derived from a locked vault would leak signal about how many credentials
+// are nearing rotation. Re-fired on:
+//   • every successful unlock (so the user sees a fresh count immediately),
+//   • every notes write (so toggling expiresAt flips the badge in-app),
+//   • each auto-lock alarm tick (the daily window can roll into `due` while
+//     the user is idle but unlocked).
+const BADGE_COLOR_DUE = "#ef4444";  // red
+const BADGE_COLOR_SOON = "#f59e0b"; // amber
+const ALARM_EXPIRY_BADGE = "an:expiry-badge";
+
+async function refreshExpiryBadge() {
+  if (!chrome.action?.setBadgeText) return;
+  if (!unlockedKey) {
+    try { await chrome.action.setBadgeText({ text: "" }); } catch { /* noop */ }
+    return;
+  }
+  const envelopes = await readEnvelopes();
+  const decrypted = [];
+  for (const env of envelopes) {
+    try { decrypted.push(await decryptNote(unlockedKey, env)); }
+    catch { /* skip undecryptable */ }
+  }
+  const counts = countExpiringNotes(decrypted);
+  const text = counts.total > 0 ? (counts.total > 99 ? "99+" : String(counts.total)) : "";
+  const color = counts.due > 0 ? BADGE_COLOR_DUE : BADGE_COLOR_SOON;
+  try { await chrome.action.setBadgeText({ text }); } catch { /* noop */ }
+  try { await chrome.action.setBadgeBackgroundColor({ color }); } catch { /* noop */ }
+  try { await chrome.action.setTitle({
+    title: counts.total === 0
+      ? "Auth Notes"
+      : `Auth Notes — ${counts.due} due, ${counts.soon} soon`,
+  }); } catch { /* noop */ }
+}
+
+handlers["notes:expiring"] = async () => {
+  const key = requireUnlocked();
+  const envelopes = await readEnvelopes();
+  const items = [];
+  const now = Date.now();
+  for (const env of envelopes) {
+    let note;
+    try { note = await decryptNote(key, env); }
+    catch { continue; }
+    if (isTrashed(note)) continue;
+    const status = expiryStatus(note, { now });
+    if (status.state === "none" || status.state === "future") continue;
+    items.push({
+      id: note.id,
+      origin: note.origin,
+      label: note.label || note.origin,
+      authMethod: note.authMethod || "",
+      expiresAt: Number(note.expiresAt) || 0,
+      state: status.state,
+      daysLeft: status.daysLeft,
+    });
+  }
+  items.sort((a, b) => a.expiresAt - b.expiresAt);
+  const counts = countExpiringNotes(
+    items.map((i) => ({ expiresAt: i.expiresAt })),
+    { now },
+  );
+  return { now, items, counts };
+};
 
 handlers["backup:export"] = async () => {
   // Vault must be unlocked so the user has just proven they hold the master

@@ -1947,8 +1947,7 @@ async function handleQuickAttachmentFiles(files) {
   else setQuickAttachmentStatus("");
 }
 
-function renderMatchAttachments(attachments) {
-  const row = document.getElementById("match-row-attachments");
+function renderMatchAttachments(attachments) {  const row = document.getElementById("match-row-attachments");
   const list = document.getElementById("match-attachments-list");
   if (!row || !list) return;
   const arr = Array.isArray(attachments) ? attachments.filter((a) => a && a.data) : [];
@@ -1999,6 +1998,7 @@ async function openQuickAdd({ note = null, prefillOrigin = "" } = {}) {
   setVal("quick-2fa", note?.twofaBackup || "none");
   setVal("quick-2fa-detail", note?.twofaDetail || "");
   setVal("quick-tags", Array.isArray(note?.tags) ? note.tags.join(", ") : "");
+  setVal("quick-expiry", note?.expiresAt ? formatDateInput(note.expiresAt) : "");
   setVal("quick-notes", note?.notes || "");
   setVal("quick-codes", Array.isArray(note?.recoveryCodes) ? note.recoveryCodes.join("\n") : "");
   renderQuickCustomFields(Array.isArray(note?.customFields) ? note.customFields : []);
@@ -2059,6 +2059,11 @@ function bindQuickAdd() {
     const list = document.getElementById("quick-fields-list");
     const rows = list?.querySelectorAll(".custom-field-row");
     rows?.[rows.length - 1]?.querySelector(".custom-field-key-input")?.focus();
+  });
+  const expiryClear = document.getElementById("quick-expiry-clear");
+  expiryClear?.addEventListener("click", () => {
+    const inp = document.getElementById("quick-expiry");
+    if (inp) { inp.value = ""; inp.focus(); }
   });
   const back = document.getElementById("quick-back");
   back?.addEventListener("click", async () => {
@@ -2135,6 +2140,7 @@ function bindQuickAdd() {
       twofaBackup: document.getElementById("quick-2fa").value,
       twofaDetail: document.getElementById("quick-2fa-detail").value.trim(),
       tags: document.getElementById("quick-tags").value,
+      expiresAt: parseExpiryInput(document.getElementById("quick-expiry").value),
       notes: document.getElementById("quick-notes").value,
       recoveryCodes: document.getElementById("quick-codes").value,
       customFields: collectQuickCustomFields(),
@@ -2306,6 +2312,78 @@ function formatRelative(ts) {
   return `${Math.floor(mo / 12)}y ago`;
 }
 
+// --- Expiry helpers ---------------------------------------------------
+/** Format a YYYY-MM-DD value (anchored to local midnight) from a timestamp. */
+function formatDateInput(ts) {
+  const t = Number(ts);
+  if (!Number.isFinite(t) || t <= 0) return "";
+  const d = new Date(t);
+  const y = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mm}-${dd}`;
+}
+
+/** Convert a date-input value back into an epoch ms anchored to local
+ *  midnight. Returns null for empty/invalid input so the upserter omits the
+ *  expiresAt field entirely. */
+function parseExpiryInput(value) {
+  const s = String(value || "").trim();
+  if (!s) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const t = new Date(s + "T00:00:00").getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+/** Classify a note's expiry into `{ state, daysLeft, label }`. Mirrors
+ *  notes.js#expiryStatus but stays UI-side so the popup doesn't have to
+ *  round-trip through the service worker for a render. */
+function expiryStatusFor(ts, now = Date.now()) {
+  const t = Number(ts);
+  if (!Number.isFinite(t) || t <= 0) return { state: "none", daysLeft: null };
+  const ms = t - now;
+  if (ms <= 0) return { state: "due", daysLeft: 0 };
+  const days = Math.ceil(ms / (24 * 60 * 60 * 1000));
+  if (ms <= 7 * 24 * 60 * 60 * 1000) return { state: "soon", daysLeft: days };
+  return { state: "future", daysLeft: days };
+}
+
+function formatExpiryLabel(ts) {
+  const status = expiryStatusFor(ts);
+  const dateStr = (() => {
+    const t = Number(ts);
+    if (!Number.isFinite(t) || t <= 0) return "";
+    try {
+      return new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    } catch { return formatDateInput(t); }
+  })();
+  if (status.state === "due") return `Overdue — ${dateStr}`;
+  if (status.state === "soon") {
+    const n = status.daysLeft || 0;
+    return `${n === 1 ? "1 day" : `${n} days`} left • ${dateStr}`;
+  }
+  if (status.state === "future") {
+  const n = status.daysLeft || 0;
+    return `${dateStr} • ${n}d`;
+  }
+  return "";
+}
+
+function renderMatchExpiry(note) {
+  const row = document.getElementById("match-row-expiry");
+  const el = document.getElementById("match-expiry");
+  if (!row || !el) return;
+  const status = expiryStatusFor(note?.expiresAt);
+  if (status.state === "none") {
+    row.hidden = true;
+    el.textContent = "";
+    return;
+  }
+  row.hidden = false;
+  el.dataset.state = status.state;
+  el.textContent = formatExpiryLabel(note.expiresAt);
+}
+
 let currentMatchNote = null;
 function renderMatch(note, allNotes = []) {
   currentMatchNote = note;
@@ -2367,6 +2445,7 @@ function renderMatch(note, allNotes = []) {
   renderRecoveryCodes(Array.isArray(note.recoveryCodes) ? note.recoveryCodes : []);
   renderMatchCustomFields(Array.isArray(note.customFields) ? note.customFields : []);
   renderMatchAttachments(Array.isArray(note.attachments) ? note.attachments : []);
+  renderMatchExpiry(note);
 
   const foot = document.getElementById("match-foot");
   if (foot) {

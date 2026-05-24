@@ -130,6 +130,7 @@ export const HISTORY_TRACKED_FIELDS = Object.freeze([
   "label", "origin", "authMethod", "email",
   "twofaBackup", "twofaDetail", "notes", "tags",
   "pinned", "passwordHint", "recoveryCodes", "customFields", "attachments",
+  "expiresAt",
 ]);
 
 const HISTORY_OPAQUE_FIELDS = new Set(["passwordHint", "recoveryCodes", "customFields", "attachments"]);
@@ -540,7 +541,74 @@ export function normalizeNote(input, { now = Date.now() } = {}) {
     // past the 30-day retention window.
     record.deletedAt = Math.min(Number(input.deletedAt), now);
   }
+  const expiresAt = normalizeExpiresAt(input.expiresAt);
+  if (expiresAt) record.expiresAt = expiresAt;
   return record;
+}
+
+/** Window inside which an upcoming expiry is considered "soon". 7 days. */
+export const EXPIRY_NEAR_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Cap how far in the future an expiry stamp can sit. 50 years — enough for
+ *  any realistic credential rotation policy, tight enough to reject obvious
+ *  forgeries (e.g. Number.MAX_SAFE_INTEGER). */
+const EXPIRY_MAX_MS = 50 * 365 * 24 * 60 * 60 * 1000;
+
+/** Normalize an expiry timestamp. Accepts numbers (epoch ms), ISO strings,
+ *  or YYYY-MM-DD date inputs. Returns null when the input is empty/invalid
+ *  so the caller can omit the field entirely. */
+export function normalizeExpiresAt(input) {
+  if (input == null || input === "") return null;
+  let ms = null;
+  if (typeof input === "number" && Number.isFinite(input)) {
+    ms = Math.floor(input);
+  } else if (typeof input === "string") {
+    const s = input.trim();
+    if (!s) return null;
+    if (/^\d+$/.test(s)) ms = Math.floor(Number(s));
+    else {
+      // YYYY-MM-DD inputs anchor to local midnight; full ISO strings are
+      // parsed verbatim. Anything else ("tomorrow", "next week") is rejected.
+      const parsed = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + "T00:00:00") : new Date(s);
+      const t = parsed.getTime();
+      if (!Number.isFinite(t)) return null;
+      ms = t;
+    }
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const cap = Date.now() + EXPIRY_MAX_MS;
+  if (ms > cap) return null;
+  return ms;
+}
+
+/** Classify a note's expiry: returns `{ state, ms, daysLeft }` where state
+ *  is one of `none`, `future`, `soon`, `due`. `none` is "no expiry set". */
+export function expiryStatus(note, { now = Date.now() } = {}) {
+  const t = Number(note?.expiresAt);
+  if (!Number.isFinite(t) || t <= 0) return { state: "none", ms: 0, daysLeft: null };
+  const ms = t - now;
+  if (ms <= 0) return { state: "due", ms, daysLeft: 0 };
+  const daysLeft = Math.ceil(ms / (24 * 60 * 60 * 1000));
+  if (ms <= EXPIRY_NEAR_MS) return { state: "soon", ms, daysLeft };
+  return { state: "future", ms, daysLeft };
+}
+
+/** Count active (non-trashed) notes whose expiry is due/soon. The vault
+ *  badge surfaces `due + soon` so the user notices before a credential
+ *  silently lapses. */
+export function countExpiringNotes(notes, { now = Date.now() } = {}) {
+  const list = Array.isArray(notes) ? notes : [];
+  let due = 0;
+  let soon = 0;
+  for (const n of list) {
+    if (!n || isTrashed(n)) continue;
+    const { state } = expiryStatus(n, { now });
+    if (state === "due") due++;
+    else if (state === "soon") soon++;
+  }
+  return { due, soon, total: due + soon };
 }
 
 /** Soft-delete retention: how long a trashed note lingers before becoming
@@ -655,6 +723,7 @@ export const ENVELOPE_FORBIDDEN_KEYS = Object.freeze([
   "customFields",
   "attachments",
   "history",
+  "expiresAt",
   "createdAt",
   "updatedAt",
 ]);

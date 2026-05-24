@@ -340,6 +340,19 @@
               </dt>
               <dd id="match-notes"></dd>
             </div>
+            <div class="match-row" id="match-row-expiry" hidden>
+              <dt>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="16" rx="2"/>
+                  <path d="M3 9h18M8 3v4M16 3v4"/>
+                  <path d="M12 13v3l2 1"/>
+                </svg>
+                <span>Expires</span>
+              </dt>
+              <dd>
+                <span id="match-expiry" class="match-expiry" data-state="future"></span>
+              </dd>
+            </div>
           </dl>
           <p class="match-foot" id="match-foot"></p>
           <div class="match-tags" id="match-tags" hidden></div>
@@ -468,6 +481,19 @@
           <span class="field-label">Tags (optional)</span>
           <div class="input-wrap">
             <input id="quick-tags" type="text" spellcheck="false" placeholder="work, dev, banking">
+          </div>
+        </label>
+        <label class="field" id="quick-expiry-field">
+          <span class="field-label">Expires (optional)</span>
+          <p class="field-hint">Date this credential should be rotated. We badge the toolbar 7 days out so you don't get caught flat-footed.</p>
+          <div class="input-wrap input-wrap-row">
+            <input id="quick-expiry" type="date" spellcheck="false" autocomplete="off">
+            <button type="button" id="quick-expiry-clear" class="btn-secondary btn-compact">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 6l12 12"/><path d="M18 6l-12 12"/>
+              </svg>
+              <span class="btn-label">Clear</span>
+            </button>
           </div>
         </label>
         <fieldset class="field field-fieldset" id="quick-pw-fieldset">
