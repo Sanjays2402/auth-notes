@@ -57,6 +57,17 @@ const norm = notes.normalizeNote({
   tags: ["Work", "dev", "work", "Has Space", "!!!", ""],
 });
 if (norm.origin !== "github.com") { console.error("origin not normalized"); process.exit(1); }
+// `www.` variants must canonicalize to the same storage origin so site-scoped
+// lookups match regardless of which variant the note was saved (or opened) on.
+if (notes.canonicalOrigin("https://www.github.com/login") !== "github.com") {
+  console.error("canonicalOrigin did not strip www."); process.exit(1);
+}
+if (notes.canonicalOrigin("www.example.com") !== notes.canonicalOrigin("https://example.com/")) {
+  console.error("canonicalOrigin www/bare mismatch"); process.exit(1);
+}
+if (notes.normalizeNote({ origin: "https://www.github.com" }).origin !== "github.com") {
+  console.error("normalizeNote did not canonicalize www. origin"); process.exit(1);
+}
 if (!norm.id || norm.id.length < 10) { console.error("missing id"); process.exit(1); }
 if (!norm.createdAt || !norm.updatedAt) { console.error("missing timestamps"); process.exit(1); }
 if (!Array.isArray(norm.tags) || norm.tags.join(",") !== "work,dev,has-space") {

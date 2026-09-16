@@ -477,10 +477,22 @@ export function isSupportedUrl(input) {
   return true;
 }
 
-/** Strip a leading `www.` for display purposes only. Storage origin is unchanged. */
+/** Strip a leading `www.` for display purposes. */
 export function displayOrigin(origin) {
   const s = String(origin || "").toLowerCase();
   return s.startsWith("www.") ? s.slice(4) : s;
+}
+
+/**
+ * Storage-canonical origin: `originOf` plus a single leading `www.` strip,
+ * so `www.example.com` and `example.com` share one note record. Site-scoped
+ * lookups must compare against this, not the raw `originOf` output, or a
+ * note saved while browsing the `www.` variant will not surface on the bare
+ * domain (and vice versa).
+ */
+export function canonicalOrigin(input) {
+  const o = originOf(input);
+  return o.startsWith("www.") ? o.slice(4) : o;
 }
 
 /** Generate a short, unguessable id. 16 random bytes → 22-char base64url. */
@@ -498,7 +510,7 @@ export function newId() {
  */
 export function normalizeNote(input, { now = Date.now() } = {}) {
   if (!input || typeof input !== "object") throw new Error("note must be an object");
-  const origin = originOf(input.origin);
+  const origin = canonicalOrigin(input.origin);
   if (!origin) throw new Error("origin is required");
   if (origin.length > MAX_ORIGIN) throw new Error("origin too long");
 

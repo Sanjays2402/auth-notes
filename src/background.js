@@ -44,6 +44,7 @@ import {
   normalizeTag,
   normalizeTags,
   originOf,
+  canonicalOrigin,
   partitionTrash,
   planImport,
   sortNotes,
@@ -1032,10 +1033,12 @@ handlers["notes:search"] = async (msg) => {
 
 handlers["notes:list"] = async (msg) => {
   const key = requireUnlocked();
-  const filter = msg?.origin ? originOf(msg.origin) : null;
+  const filter = msg?.origin ? canonicalOrigin(msg.origin) : null;
   const includeTrashed = msg?.includeTrashed === true;
   const envelopes = await readEnvelopes();
-  const scoped = filter ? envelopes.filter((e) => e.origin === filter) : envelopes;
+  // Compare canonical origins so notes stored under a `www.` variant still
+  // match lookups from the bare domain (and vice versa).
+  const scoped = filter ? envelopes.filter((e) => canonicalOrigin(e.origin) === filter) : envelopes;
   const decrypted = [];
   for (const env of scoped) {
     try {

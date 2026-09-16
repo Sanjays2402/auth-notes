@@ -13,6 +13,12 @@ cd auth-notes
 
 Then in Chrome: `chrome://extensions` → Developer mode → "Load unpacked" → select this folder.
 
+## Site matching
+
+A note saved while browsing `www.example.com` is treated as the same site as
+`example.com`: origins are canonicalized by stripping a single leading `www.`
+before storage, and site-scoped lookups match on the canonical origin.
+
 ## Permissions
 
 - `storage`
